@@ -1,71 +1,31 @@
-# Privacy
+# Конфиденциальность
 
-## The promise
+Jot отправляет данные напрямую в API, выбранный пользователем. У приложения нет собственного сервера, аналитики и телеметрии. При выборе Polza аудио проходит через Polza и её поставщиков моделей; условия хранения и обработки определяет провайдер.
 
-Your voice goes from your Mac directly to Google's Gemini API, using your own API
-key. There is no middleman server, no account, no analytics, no telemetry.
-Everything else stays on your Mac. The code is open — verify all of this.
+## Что отправляется
 
-## What leaves your machine (the complete list)
+1. **Аудиозапись** — в выбранный API распознавания. Для Gemini используется FLAC, для совместимого файлового API — WAV в multipart, для аудиочата — WAV в base64 внутри JSON. Gemini Live, если включён и доступен, отправляет звук потоково в Google.
+2. **Термины словаря** — Gemini и аудиочат получают подсказки написания. Файловый совместимый API не получает неподтверждённых словарных параметров. Локальные правила замены применяются после распознавания.
+3. **Текст расшифровки и инструкции очистки** — только при включённой настройке «Очищать и оформлять текст». По умолчанию она выключена. Очистка может использовать тот же API или отдельные URL, ключ и модель. В запрос входят термины и пары исправления из словаря. Если включено сопоставление тона, передаётся категория текста: письмо, рабочий чат, личный чат или код; имя приложения и его содержимое не отправляются.
+4. **Ключ выбранного API** — в заголовке запроса (`Authorization: Bearer` для совместимого API, `x-goog-api-key` для Gemini). Ключи хранятся в macOS Keychain с привязкой к провайдеру и базовому URL. В настройках, истории и файлах ключей нет. Перенаправление HTTP на другой origin или менее защищённую схему блокируется.
 
-1. **The audio of each dictation** (FLAC-compressed), sent to
-   `generativelanguage.googleapis.com` — the only network host this app talks to.
-2. **Your dictionary terms**, alongside that audio. The transcription model uses
-   them to bias what it hears, which is why names and jargon come out spelled
-   right as you speak rather than being corrected afterwards. Only the correct
-   spellings are sent — never the misspellings you record. They ride on every
-   dictation, including with Smart transcription off.
-3. **The formatting prompt**, *only if* "Match tone to the app you're in" is on
-   in Settings → Dictation — off by default. It contains the transcript being
-   formatted, the formatting rules, a coarse tone category derived from the
-   frontmost app's *category* (e.g. "chat message"), and your dictionary terms.
-   With that setting off, your transcript text never leaves this Mac at all.
-   Never window contents, never screenshots, never surrounding text.
-4. **Your API key**, in the request header to Google only. It is stored in the
-   macOS Keychain, never in files or preferences.
+Изменение настроек не меняет получателя старых записей. Обычный повтор использует сохранённую конфигурацию записи и её ключ из Keychain. Кнопка «С текущей моделью» явно повторно отправляет аудио в текущий API и создаёт новую запись в истории. При возврате сети или запуске приложения отложенные записи могут отправляться автоматически своему исходному API.
 
-## What never leaves
+## Что остаётся на Mac
 
-- Your history database and stored recordings — audio and transcript text leave
-  only as part of the requests above, never in bulk and never anywhere else
-- Your dictionary as a file. Individual terms ride with the audio as described
-  above, and your misspelling rules are included in the formatting prompt *only*
-  when tone matching is on — with it off (the default) they never leave. The
-  store itself, and everything you have not dictated against, stays on this Mac
-- Which apps you use, when you dictate, or anything you type
-- Keystrokes: the event tap watches your dictation key, plus — only while a
-  dictation is active — Esc (cancel), Space (the hands-free gesture), and the
-  *fact that* another key was pressed (the accidental-chord guard; which key it
-  was is never examined beyond its keycode, never logged, never stored, never
-  transmitted). When you're not dictating, other keys pass through untouched.
-- Screenshots: never taken. The app contains no screen-capture code.
-- Telemetry: there is none. No analytics SDK, no crash uploader, no phone-home.
+- История, исходные аудиофайлы и метаданные: `~/Library/Application Support/Jot/recordings/`. URL, модели и язык сохраняются для воспроизводимого повтора; исходный текст записывается до очистки.
+- Словарь целиком как файл, история использования приложений, окружающий текст и содержимое окон.
+- Снимки экрана и телеметрия отсутствуют. Горячие клавиши обрабатываются локально: приложение наблюдает клавишу диктовки и необходимые жесты отмены/фиксации записи.
 
-## What's stored locally, and your controls
+В разделе «Хранение и приватность» можно выбрать срок хранения аудио и удалить историю. После удаления аудиофайла повторное распознавание недоступно, сохранённый текст остаётся. Файлы не шифруются отдельно; защиту диска обеспечивает FileVault, если включён.
 
-- One folder per dictation (`~/Library/Application Support/Jot/recordings/`):
-  crash-safe audio, transcript, metadata — this is what makes Retry and recovery work.
-- Settings → Privacy & Storage: audio retention (24h / 7d / 30d / forever / never —
-  "never" disables Retry), plus one-click **Delete all history**.
-- Local files are protected by FileVault if enabled; they are not separately
-  encrypted (stated honestly).
+При активном защищённом поле диктовка не начинается; уже полученный текст сохраняется в истории без вставки и помещения в буфер обмена.
 
-## Google's side of the wire
+Условия обработки облаком зависят от выбранных API и тарифов. Приложение не обещает единые правила хранения или обучения моделей для всех провайдеров.
 
-Your audio is governed by your own Gemini API terms with Google. As of writing,
-paid-tier API usage is not used for model training; free-tier usage may be. That
-relationship is yours — this app doesn't broker it. Review the
-[Gemini API terms](https://ai.google.dev/gemini-api/terms).
+## Проверка
 
-## Secure input
-
-When a password field is focused (secure input), dictation refuses to start, and
-a transcript in flight is held in History only — never inserted, never placed on
-the clipboard.
-
-## Verify it
-
-- Build from source (`./scripts/build.sh`).
-- Watch traffic with Little Snitch or `nettop` — you'll see exactly one host.
-- Read the prompt: it's a source file — note it governs only the optional tone pass; with that off, formatting happens inside Google's transcription model and there is no local prompt to read
-  ([PromptV1.swift](../JotCore/Sources/FormattingPipeline/PromptV1.swift)).
+- Проверьте URL распознавания и очистки в разделе «API и модели» и сетевой трафик через `nettop` или Little Snitch.
+- Код запросов: [CompatibleAPIClient.swift](../JotCore/Sources/TranscriptionClient/CompatibleAPIClient.swift), [GeminiClient.swift](../JotCore/Sources/TranscriptionClient/GeminiClient.swift).
+- Инструкции очистки: [PromptV1.swift](../JotCore/Sources/FormattingPipeline/PromptV1.swift). Проверка сходства и возврат исходного текста уменьшают риск изменения смысла, но не доказывают точность модели.
+- `./scripts/verify-api-contract.sh` проверяет маршруты, тела запросов, отмену и обработку ошибок на локальных ответах без настоящих ключей и обращений к API моделей.

@@ -84,7 +84,7 @@ targets:
         LSApplicationCategoryType: public.app-category.productivity
         LSUIElement: true # menu bar app: no Dock icon
         NSMicrophoneUsageDescription: Jot записывает звук, пока вы удерживаете клавишу диктовки, чтобы преобразовать речь в текст.
-        NSHumanReadableCopyright: "Copyright 2026 Google LLC. Apache License 2.0. This is not an officially supported Google product."
+        NSHumanReadableCopyright: "Original Jot: Copyright 2026 Google LLC. Fork maintained by Max Zernyaev. Apache License 2.0. This is not an officially supported Google product."
         LSMinimumSystemVersion: "14.0"
         CFBundleURLTypes:
           - CFBundleURLName: com.ammaar.jot.url

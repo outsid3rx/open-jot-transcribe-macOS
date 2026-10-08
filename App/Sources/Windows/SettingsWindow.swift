@@ -463,11 +463,15 @@ struct AboutPane: View {
                     .foregroundStyle(JotUI.Colors.onSurfaceVariant)
             }
             HStack(spacing: 4) {
-                Text(JotL10n.text("Created by"))
+                Text(JotL10n.text("Автор форка"))
                     .foregroundStyle(JotUI.Colors.onSurfaceVariant)
-                Link("Ammaar Reshi", destination: JotLinks.author)
+                Link(JotLinks.authorName, destination: JotLinks.author)
             }
             .font(JotUI.TypeScale.body())
+
+            Link(JotL10n.text("Оригинальный проект: Jot от Ammaar Reshi"), destination: JotLinks.originalRepository)
+                .font(JotUI.TypeScale.labelSmall())
+                .multilineTextAlignment(.center)
 
             HStack(spacing: JotUI.Spacing.m) {
                 Link(JotL10n.text("Source"), destination: JotLinks.repository)
