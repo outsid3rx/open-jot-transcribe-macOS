@@ -8,7 +8,6 @@ public struct TranscriptionService: TranscriptionServicing {
     private let apiKey: @Sendable (ModelEndpoint) -> String?
     private let session: URLSession?
     private let dictionary: DictionaryStore
-    static let cleanupDeadline: TimeInterval = 1.5
 
     public init(settings: SettingsStore = SettingsStore(),
                 apiKey: @escaping @Sendable (ModelEndpoint) -> String? = { KeychainStore.loadAPIKey(account: $0.credentialAccount) },
@@ -110,14 +109,17 @@ public struct TranscriptionService: TranscriptionServicing {
         do {
             try endpoint.validate()
             guard let key = apiKey(endpoint), !key.isEmpty else { return fallback }
-            let response: String
-            if endpoint.provider == .gemini {
-                let client = GeminiClient(apiKey: { key })
-                response = try await client.cleanup(prompt: prompt, model: endpoint.model,
-                                                     endpoint: endpoint.url!, deadline: Self.cleanupDeadline)
-            } else {
-                let client = CompatibleAPIClient(apiKey: { key }, session: session)
-                response = try await client.cleanup(prompt: prompt, endpoint: endpoint, deadline: Self.cleanupDeadline)
+            // One budget for the complete cleanup operation, including any 429 wait/retry.
+            let deadline = configuration.cleanupTimeout
+            let response = try await GeminiClient.withDeadline(seconds: deadline) { [session] in
+                if endpoint.provider == .gemini {
+                    let client = GeminiClient(apiKey: { key })
+                    return try await client.cleanup(prompt: prompt, model: endpoint.model,
+                                                    endpoint: endpoint.url!, deadline: deadline)
+                } else {
+                    let client = CompatibleAPIClient(apiKey: { key }, session: session)
+                    return try await client.cleanup(prompt: prompt, endpoint: endpoint, deadline: deadline)
+                }
             }
             try Task.checkCancellation()
             let text = ValidationGate.stripArtifacts(response)

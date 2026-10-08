@@ -340,3 +340,5 @@
 "Язык транскрибации" = "Transcription language";
 "привет проверяю голосовой ввод" = "hello testing voice input";
 "пробел" = "space";
+"Время ожидания очистки" = "Cleanup timeout";
+"От 1 до 120 секунд, по умолчанию 10. Лимит включает повторные попытки. Если очистка не успеет, будет использована исходная расшифровка." = "From 1 to 120 seconds, default 10. Includes retries. If cleanup times out, the original transcript will be used.";

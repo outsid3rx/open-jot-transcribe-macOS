@@ -39,6 +39,17 @@ struct APISettingsEditor: View {
                     Text(JotL10n.text("Удаляет слова-паразиты, применяет самокоррекции и оформляет списки. Выполняет дополнительный платный запрос с текстом. По умолчанию выключено."))
                         .font(JotUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
                     if configuration.cleanupEnabled {
+                        Stepper(value: $configuration.cleanupTimeoutSeconds,
+                                in: TranscriptionConfiguration.cleanupTimeoutRange) {
+                            HStack {
+                                Text(JotL10n.text("Время ожидания очистки"))
+                                Spacer()
+                                Text(String(format: JotL10n.text("%.0f с"), Double(configuration.cleanupTimeoutSeconds)))
+                                    .monospacedDigit()
+                            }
+                        }
+                        Text(JotL10n.text("От 1 до 120 секунд, по умолчанию 10. Лимит включает повторные попытки. Если очистка не успеет, будет использована исходная расшифровка."))
+                            .font(JotUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
                         Toggle(JotL10n.text("Использовать тот же API"), isOn: $configuration.cleanupUsesRecognitionAPI)
                         if configuration.cleanupUsesRecognitionAPI {
                             TextField(JotL10n.text("Модель очистки"), text: $configuration.cleanup.model,

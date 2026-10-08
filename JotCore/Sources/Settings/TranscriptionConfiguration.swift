@@ -90,10 +90,14 @@ public struct ModelEndpoint: Codable, Equatable, Sendable {
 
 /// Persisted with each recording. Switching Settings cannot reroute a retry.
 public struct TranscriptionConfiguration: Codable, Equatable, Sendable {
+    public static let defaultCleanupTimeoutSeconds = 10
+    public static let cleanupTimeoutRange = 1...120
+
     public var recognition: ModelEndpoint
     public var cleanup: ModelEndpoint
     public var cleanupUsesRecognitionAPI: Bool
     public var cleanupEnabled: Bool
+    public var cleanupTimeoutSeconds: Int
     public var language: String
     public var nativeSmart: Bool
     public var matchTone: Bool
@@ -101,14 +105,44 @@ public struct TranscriptionConfiguration: Codable, Equatable, Sendable {
     public init(recognition: ModelEndpoint = ModelEndpoint(),
                 cleanup: ModelEndpoint = ModelEndpoint(model: "gemini-3.5-flash-lite"),
                 cleanupUsesRecognitionAPI: Bool = true, cleanupEnabled: Bool = false,
+                cleanupTimeoutSeconds: Int = Self.defaultCleanupTimeoutSeconds,
                 language: String = "", nativeSmart: Bool = true, matchTone: Bool = false) {
         self.recognition = recognition
         self.cleanup = cleanup
         self.cleanupUsesRecognitionAPI = cleanupUsesRecognitionAPI
         self.cleanupEnabled = cleanupEnabled
+        self.cleanupTimeoutSeconds = Self.clampedCleanupTimeout(cleanupTimeoutSeconds)
         self.language = language
         self.nativeSmart = nativeSmart
         self.matchTone = matchTone
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case recognition, cleanup, cleanupUsesRecognitionAPI, cleanupEnabled, cleanupTimeoutSeconds
+        case language, nativeSmart, matchTone
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            recognition: try values.decode(ModelEndpoint.self, forKey: .recognition),
+            cleanup: try values.decode(ModelEndpoint.self, forKey: .cleanup),
+            cleanupUsesRecognitionAPI: try values.decode(Bool.self, forKey: .cleanupUsesRecognitionAPI),
+            cleanupEnabled: try values.decode(Bool.self, forKey: .cleanupEnabled),
+            cleanupTimeoutSeconds: try values.decodeIfPresent(Int.self, forKey: .cleanupTimeoutSeconds)
+                ?? Self.defaultCleanupTimeoutSeconds,
+            language: try values.decode(String.self, forKey: .language),
+            nativeSmart: try values.decode(Bool.self, forKey: .nativeSmart),
+            matchTone: try values.decode(Bool.self, forKey: .matchTone)
+        )
+    }
+
+    public var cleanupTimeout: TimeInterval {
+        TimeInterval(Self.clampedCleanupTimeout(cleanupTimeoutSeconds))
+    }
+
+    private static func clampedCleanupTimeout(_ seconds: Int) -> Int {
+        min(max(seconds, cleanupTimeoutRange.lowerBound), cleanupTimeoutRange.upperBound)
     }
 
     public var effectiveCleanup: ModelEndpoint {
