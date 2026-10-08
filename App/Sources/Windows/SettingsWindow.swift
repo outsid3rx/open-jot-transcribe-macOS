@@ -28,7 +28,7 @@ final class MainWindowController: NSWindowController {
 
     init(
         store: HistoryStore?,
-        onRetry: @escaping (DictationRecord) -> Void,
+        onRetry: @escaping (DictationRecord, Bool) -> Void,
         onDeleteAllHistory: @escaping () -> Void
     ) {
         model = MainWindowModel()
@@ -73,13 +73,13 @@ enum MainSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .history: return "History"
-        case .dictionary: return "Dictionary"
-        case .general: return "General"
-        case .dictation: return "Dictation"
-        case .privacy: return "Privacy & Storage"
-        case .advanced: return "Advanced"
-        case .about: return "About"
+        case .history: return JotL10n.text("History")
+        case .dictionary: return JotL10n.text("Dictionary")
+        case .general: return JotL10n.text("General")
+        case .dictation: return JotL10n.text("Dictation")
+        case .privacy: return JotL10n.text("Privacy & Storage")
+        case .advanced: return JotL10n.text("API и модели")
+        case .about: return JotL10n.text("About")
         }
     }
 
@@ -119,7 +119,7 @@ final class MainWindowModel: ObservableObject {
 private struct MainView: View {
     @ObservedObject var model: MainWindowModel
     let store: HistoryStore?
-    let onRetry: (DictationRecord) -> Void
+    let onRetry: (DictationRecord, Bool) -> Void
     let onDeleteAllHistory: () -> Void
 
     var body: some View {
@@ -143,7 +143,7 @@ private struct MainView: View {
                     model.selection = section
                 }
             }
-            Text("Settings")
+            Text(JotL10n.text("Settings"))
                 .font(JotUI.TypeScale.labelSmall())
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 14)
@@ -169,7 +169,7 @@ private struct MainView: View {
                 if let store {
                     HistoryPane(store: store, onRetry: onRetry)
                 } else {
-                    ContentUnavailableView("History unavailable", systemImage: "clock.badge.exclamationmark")
+                    ContentUnavailableView(JotL10n.text("History unavailable"), systemImage: "clock.badge.exclamationmark")
                 }
             case .dictionary:
                 DictionaryView()
@@ -232,11 +232,24 @@ struct GeneralPane: View {
     @State private var hotkey = SettingsStore().hotkeyKey
     @State private var doubleTapLock = SettingsStore().doubleTapLockEnabled
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var interfaceLanguage = SettingsStore().interfaceLanguage
 
     var body: some View {
         Form {
             Section {
-                Picker("Dictation key", selection: $hotkey) {
+                Picker(JotL10n.text("Interface language"), selection: $interfaceLanguage) {
+                    ForEach(InterfaceLanguage.allCases, id: \.self) { language in
+                        Text(language.title).tag(language)
+                    }
+                }
+                .onChange(of: interfaceLanguage) { _, language in settings.setInterfaceLanguage(language) }
+                if interfaceLanguage != JotL10n.language {
+                    Text(JotL10n.text("Restart Jot to apply the language change."))
+                        .font(JotUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
+                }
+            }
+            Section {
+                Picker(JotL10n.text("Dictation key"), selection: $hotkey) {
                     ForEach(HotkeyKey.allCases, id: \.self) { key in
                         Text(key.displayName).tag(key)
                     }
@@ -244,16 +257,16 @@ struct GeneralPane: View {
                 .onChange(of: hotkey) { _, newKey in
                     settings.setHotkeyKey(newKey)
                 }
-                Toggle("Double-tap to lock hands-free", isOn: $doubleTapLock)
+                Toggle(JotL10n.text("Double-tap to lock hands-free"), isOn: $doubleTapLock)
                     .onChange(of: doubleTapLock) { _, enabled in
                         settings.setDoubleTapLock(enabled)
                     }
             } footer: {
-                Text("Hold to talk. Tap Space while holding to go hands-free. Esc cancels.")
+                Text(JotL10n.text("Hold to talk. Tap Space while holding to go hands-free. Esc cancels."))
             }
 
             Section {
-                Toggle("Start Jot at login", isOn: $launchAtLogin)
+                Toggle(JotL10n.text("Start Jot at login"), isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in
                         // The failure-path revert below re-enters onChange with the
                         // inverted value — this guard stops the bounce from calling
@@ -280,6 +293,7 @@ struct GeneralPane: View {
         // Re-reading on appear also covers reopening the window.
         .onAppear {
             launchAtLogin = SMAppService.mainApp.status == .enabled
+            interfaceLanguage = settings.interfaceLanguage
             hotkey = settings.hotkeyKey
             doubleTapLock = settings.doubleTapLockEnabled
         }
@@ -289,6 +303,7 @@ struct GeneralPane: View {
             switch note.object as? String {
             case "hotkeyKey": hotkey = settings.hotkeyKey
             case "doubleTapLock": doubleTapLock = settings.doubleTapLockEnabled
+            case "interfaceLanguage": interfaceLanguage = settings.interfaceLanguage
             default: break
             }
         }
@@ -300,90 +315,52 @@ struct GeneralPane: View {
 struct DictationPane: View {
     private let settings = SettingsStore()
     @State private var sounds = SettingsStore().soundsEnabled
-    @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
-    @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
     @State private var showIdleDot = SettingsStore().showIdleIndicator
     @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
-    @State private var liveTranscription = SettingsStore().liveTranscription
+    @State private var live = SettingsStore().liveTranscription
+    @State private var configuration = SettingsStore().transcriptionConfiguration
 
     var body: some View {
         Form {
             Section {
-                Toggle("Sounds", isOn: $sounds)
-                    .onChange(of: sounds) { _, enabled in settings.setSoundsEnabled(enabled) }
-                Toggle("Show resting indicator", isOn: $showIdleDot)
-                    .onChange(of: showIdleDot) { _, show in settings.setShowIdleIndicator(show) }
-            } footer: {
-                Text("The resting dot grows into a Dictate button on hover; click it for hands-free. Off = the pill appears only while dictating.")
+                Toggle(JotL10n.text("Звуки"), isOn: $sounds)
+                    .onChange(of: sounds) { _, value in settings.setSoundsEnabled(value) }
+                Toggle(JotL10n.text("Показывать индикатор в режиме ожидания"), isOn: $showIdleDot)
+                    .onChange(of: showIdleDot) { _, value in settings.setShowIdleIndicator(value) }
             }
-
-            Section {
-                Toggle("Smart transcription", isOn: $smartTranscription)
-                    .onChange(of: smartTranscription) { _, enabled in
-                        settings.setSmartTranscription(enabled)
-                    }
-            } footer: {
-                Text("Removes filler words and applies self-corrections (\"at 2 — actually 3\") as it transcribes. Off = word for word — unless tone matching below is on, which rewrites either way.")
-            }
-
-            Section {
-                Toggle("Match tone to the app you're in", isOn: $cleanupPass)
-                    .onChange(of: cleanupPass) { _, enabled in
-                        guard enabled != settings.smartCleanupPassEnabled else { return }
-                        settings.setSmartCleanupPass(enabled)
-                    }
-                Toggle("Better hearing in loud rooms", isOn: $noiseHandling)
-                    .onChange(of: noiseHandling) { _, enabled in
-                        settings.setExperimentalNoiseHandling(enabled)
-                    }
-                Toggle("Live transcription", isOn: $liveTranscription)
-                    .onChange(of: liveTranscription) { _, enabled in
-                        settings.setLiveTranscription(enabled)
-                        // Switching it on is an explicit "try again" — clear the
-                        // streak that suppressed it, but keep the history so the
-                        // footer still tells the truth about how it has gone.
-                        if enabled { LiveStats().clearStreak() }
-                    }
-                    // The legacy transport is a different endpoint entirely, so
-                    // live cannot run alongside it. Disabling the control says so;
-                    // leaving it tappable but inert is the exact silent no-op this
-                    // app keeps writing comments about.
-                    .disabled(settings.usesLegacyTranscribeEndpoint)
-            } header: {
-                Text("Experimental")
-            } footer: {
-                if settings.usesLegacyTranscribeEndpoint {
-                    Text("Live transcription is unavailable while the legacy transcription endpoint is on in Advanced.")
-                } else {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Tone runs a second model over the transcript so email reads like email and chat like chat — it adds about half a second and sends the transcript text once more. Loud rooms judges your voice against the actual room noise instead of a fixed level. Live streams your voice as you speak instead of uploading at the end — if the connection stumbles it quietly falls back to the normal upload, so nothing is ever lost. All off by default.")
-                        // Live failing is invisible by design — it just looks like
-                        // a slower dictation — so without this the question "is it
-                        // actually working?" has no answer.
-                        if let summary = LiveStats().summary {
-                            Text(summary)
+            if configuration.recognition.provider == .gemini {
+                Section("Gemini") {
+                    Toggle(JotL10n.text("Встроенная Smart-транскрибация"), isOn: $configuration.nativeSmart)
+                        .disabled(configuration.recognition.recognitionAPI != .gemini)
+                    Text(JotL10n.text("Обработка внутри модели Gemini. Дополнительная очистка настраивается отдельно в разделе API."))
+                        .font(JotUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
+                    Toggle(JotL10n.text("Live-транскрибация"), isOn: $live)
+                        .disabled(!configuration.permitsLive)
+                        .onChange(of: live) { _, value in
+                            settings.setLiveTranscription(value)
+                            if value { LiveStats().clearStreak() }
                         }
+                    if !configuration.permitsLive {
+                        Text(JotL10n.text("Live доступен для стандартного Gemini API с автоопределением языка и без второго запроса очистки."))
+                            .font(JotUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
                     }
+                    if let summary = LiveStats().summary { Text(summary).font(JotUI.TypeScale.labelSmall()) }
                 }
             }
+            Section(JotL10n.text("Микрофон")) {
+                Toggle(JotL10n.text("Распознавать речь относительно фонового шума"), isOn: $noiseHandling)
+                    .onChange(of: noiseHandling) { _, value in settings.setExperimentalNoiseHandling(value) }
+            }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
-            if note.object as? String == "smartTranscription" {
-                smartTranscription = settings.smartTranscriptionEnabled
-            }
-            if note.object as? String == "liveTranscription" {
-                liveTranscription = settings.liveTranscription
-            }
-            // Auto-degrade flips this one off after three gate trips, so a stale
-            // ON toggle would make the user's next tap a silent no-op.
-            if note.object as? String == "smartCleanupPass" {
-                cleanupPass = settings.smartCleanupPassEnabled
-            }
-            // jot://set drives this headlessly in DEBUG — the pane must not show
-            // a stale toggle after the flag moved underneath it.
-            if note.object as? String == "experimentalNoiseHandling" {
-                noiseHandling = settings.experimentalNoiseHandling
-            }
+        .onChange(of: configuration) { _, value in
+            if value != settings.transcriptionConfiguration { settings.setTranscriptionConfiguration(value) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange)) { _ in
+            configuration = settings.transcriptionConfiguration
+            sounds = settings.soundsEnabled
+            showIdleDot = settings.showIdleIndicator
+            noiseHandling = settings.experimentalNoiseHandling
+            live = settings.liveTranscription
         }
     }
 }
@@ -399,12 +376,12 @@ struct PrivacyPane: View {
     var body: some View {
         Form {
             Section {
-                Picker("Keep audio recordings", selection: $retentionDays) {
-                    Text("Never (disables Retry)").tag(-1)
-                    Text("24 hours").tag(1)
-                    Text("7 days").tag(7)
-                    Text("30 days").tag(30)
-                    Text("Forever").tag(0)
+                Picker(JotL10n.text("Keep audio recordings"), selection: $retentionDays) {
+                    Text(JotL10n.text("Never (disables Retry)")).tag(-1)
+                    Text(JotL10n.text("24 hours")).tag(1)
+                    Text(JotL10n.text("7 days")).tag(7)
+                    Text(JotL10n.text("30 days")).tag(30)
+                    Text(JotL10n.text("Forever")).tag(0)
                 }
                 .onChange(of: retentionDays) { _, days in
                     settings.setAudioRetentionDays(days)
@@ -416,29 +393,29 @@ struct PrivacyPane: View {
                     }
                 }
             } footer: {
-                Text("Transcripts stay in History until you delete them.")
+                Text(JotL10n.text("Transcripts stay in History until you delete them."))
             }
 
             Section {
-                LabeledContent("Audio") { Text("Sent to the Gemini API with your key") }
-                LabeledContent("Transcript text") { Text("Only if tone matching is on — otherwise it never leaves") }
-                LabeledContent("Dictionary terms") { Text("Sent with the audio, so names are spelled right as you speak") }
-                LabeledContent("Everything else") { Text("Never leaves this Mac") }
+                LabeledContent(JotL10n.text("Audio")) { Text(JotL10n.text("Sent to the Gemini API with your key")) }
+                LabeledContent(JotL10n.text("Transcript text")) { Text(JotL10n.text("Only if tone matching is on — otherwise it never leaves")) }
+                LabeledContent(JotL10n.text("Dictionary terms")) { Text(JotL10n.text("Sent with the audio, so names are spelled right as you speak")) }
+                LabeledContent(JotL10n.text("Everything else")) { Text(JotL10n.text("Never leaves this Mac")) }
             } header: {
-                Text("What leaves your Mac")
+                Text(JotL10n.text("What leaves your Mac"))
             } footer: {
-                Text("No middleman server, no account, no analytics, no screenshots, no keystroke logging. One network host.")
+                Text(JotL10n.text("No middleman server, no account, no analytics, no screenshots, no keystroke logging. One network host."))
             }
 
             Section {
-                Button("Delete All History…", role: .destructive) {
+                Button(JotL10n.text("Delete All History…"), role: .destructive) {
                     confirmingDelete = true
                 }
                 .confirmationDialog(
-                    "Delete all dictation history? Audio and transcripts will be removed from this Mac.",
+                    JotL10n.text("Delete all dictation history? Audio and transcripts will be removed from this Mac."),
                     isPresented: $confirmingDelete
                 ) {
-                    Button("Delete Everything", role: .destructive) { onDeleteAllHistory() }
+                    Button(JotL10n.text("Delete Everything"), role: .destructive) { onDeleteAllHistory() }
                 }
             }
         }
@@ -448,166 +425,7 @@ struct PrivacyPane: View {
 // MARK: - Advanced
 
 struct AdvancedPane: View {
-    private let settings = SettingsStore()
-    /// Placeholders derive from the REAL defaults — a hardcoded string went
-    /// stale the day the preview model was retired (dogfood).
-    private static let defaultConfig = GeminiConfig()
-    @State private var apiKey = ""
-    @State private var keyStatus: KeyStatus = KeychainStore.loadAPIKey() == nil ? .missing : .stored
-    @State private var endpoint = SettingsStore().endpointOverride ?? ""
-    @State private var transcribeModel = SettingsStore().transcribeModelOverride ?? ""
-    @State private var cleanupModel = SettingsStore().cleanupModelOverride ?? ""
-
-    enum KeyStatus { case missing, stored, validating, valid, invalid, saveFailed, savedOffline }
-
-    private var hasStoredKey: Bool { keyStatus == .stored || keyStatus == .valid || keyStatus == .savedOffline }
-
-    private var endpointLooksBroken: Bool {
-        // Same predicate the effective config uses — the warning and reality
-        // can never drift apart (SettingsStore.usableEndpointURL).
-        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty && SettingsStore.usableEndpointURL(trimmed) == nil
-    }
-    @State private var legacyEndpoint = SettingsStore().usesLegacyTranscribeEndpoint
-
-    var body: some View {
-        Form {
-            Section {
-                HStack {
-                    SecureField("API key", text: $apiKey,
-                                prompt: Text(hasStoredKey ? "••••••••  (stored in Keychain)" : "Paste your key"))
-                        .font(JotUI.TypeScale.code)
-                    keyStatusBadge
-                }
-                if keyStatus == .invalid, KeychainStore.loadAPIKey() != nil {
-                    Text("That key didn't work — your saved key is unchanged.")
-                        .font(JotUI.TypeScale.labelSmall())
-                        .foregroundStyle(JotUI.Colors.error)
-                }
-                if keyStatus == .saveFailed {
-                    Text("The key validated but couldn't be saved to your Keychain — try again.")
-                        .font(JotUI.TypeScale.labelSmall())
-                        .foregroundStyle(JotUI.Colors.error)
-                }
-                if keyStatus == .savedOffline {
-                    Text("You look offline — key saved; it'll be checked on your first dictation.")
-                        .font(JotUI.TypeScale.labelSmall())
-                        .foregroundStyle(.secondary)
-                }
-                HStack {
-                    Button("Save & Validate") { saveAndValidate() }
-                        .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
-                    if hasStoredKey {
-                        Button("Remove Key…", role: .destructive) { removeKey() }
-                    }
-                    Spacer()
-                    Link("Get a key in Google AI Studio", destination: URL(string: "https://aistudio.google.com/apikey")!)
-                        .font(JotUI.TypeScale.labelSmall())
-                }
-            } header: {
-                Text("Gemini API key")
-            } footer: {
-                Text("Stored in your Mac's Keychain and only ever sent to Google.")
-            }
-
-            Section {
-                TextField("Endpoint", text: $endpoint,
-                          prompt: Text(Self.defaultConfig.endpoint.absoluteString))
-                    .font(JotUI.TypeScale.code)
-                    .onChange(of: endpoint) { _, value in
-                        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                        settings.setEndpointOverride(trimmed.isEmpty ? nil : trimmed)
-                    }
-                if endpointLooksBroken {
-                    Text("Not a valid http(s) URL — the default endpoint is being used.")
-                        .font(JotUI.TypeScale.labelSmall())
-                        .foregroundStyle(JotUI.Colors.error)
-                }
-                TextField("Transcription model", text: $transcribeModel,
-                          prompt: Text(Self.defaultConfig.transcribeModel))
-                    .font(JotUI.TypeScale.code)
-                    .onChange(of: transcribeModel) { _, value in
-                        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                        settings.setTranscribeModelOverride(trimmed.isEmpty ? nil : trimmed)
-                    }
-                TextField("Formatting model", text: $cleanupModel,
-                          prompt: Text(Self.defaultConfig.cleanupModel))
-                    .font(JotUI.TypeScale.code)
-                    .onChange(of: cleanupModel) { _, value in
-                        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                        settings.setCleanupModelOverride(trimmed.isEmpty ? nil : trimmed)
-                    }
-            } header: {
-                Text("Model overrides")
-            } footer: {
-                Text("Preview models get renamed — override here if a model 404s. Leave blank for defaults — every edit saves as you type.")
-            }
-
-            Section {
-                Toggle("Use the previous transcription endpoint", isOn: $legacyEndpoint)
-                    .onChange(of: legacyEndpoint) { _, enabled in
-                        settings.setLegacyTranscribeEndpoint(enabled)
-                    }
-            } footer: {
-                Text("Jot transcribes through Gemini's newer interactions endpoint, which is what makes Smart transcription possible. If it starts misbehaving, this switches back to the older one — transcription still works, but it will be word-for-word and Smart transcription will have no effect.")
-            }
-        }
-        // Key saved elsewhere (onboarding, dev-file migration) while this pane is
-        // open: refresh the badge — but never clobber in-flight feedback.
-        .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
-            if note.object as? String == "apiKey", keyStatus == .missing || keyStatus == .stored {
-                keyStatus = KeychainStore.loadAPIKey() == nil ? .missing : .stored
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var keyStatusBadge: some View {
-        switch keyStatus {
-        case .missing:
-            Image(systemName: "key.slash").foregroundStyle(.secondary)
-        case .stored, .savedOffline:
-            Image(systemName: "checkmark.circle").foregroundStyle(.secondary)
-        case .validating:
-            ProgressView().controlSize(.small)
-        case .valid:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(JotUI.Colors.success)
-        case .invalid, .saveFailed:
-            Image(systemName: "xmark.circle.fill").foregroundStyle(JotUI.Colors.error)
-        }
-    }
-
-    private func saveAndValidate() {
-        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return }
-        keyStatus = .validating
-        Task {
-            let client = GeminiClient(apiKey: { key })
-            let check = await client.validateKey(endpoint: settings.geminiConfig.endpoint)
-            // Same rule as onboarding: a key the server REJECTED never gets
-            // saved, but a check we simply could not perform must not wall the
-            // user out. The distinction now comes from the response itself
-            // instead of a reachability probe that false-negatives.
-            switch check {
-            case .valid, .unreachable:
-                if KeychainStore.saveAPIKey(key) {
-                    apiKey = ""
-                    keyStatus = check == .valid ? .valid : .savedOffline
-                } else {
-                    // A green check over a lost key is the worst possible lie.
-                    keyStatus = .saveFailed
-                }
-            case .rejected:
-                keyStatus = .invalid
-            }
-        }
-    }
-
-    private func removeKey() {
-        KeychainStore.deleteAPIKey(notify: true)
-        apiKey = ""
-        keyStatus = .missing
-    }
+    var body: some View { APISettingsEditor() }
 }
 
 // MARK: - About
@@ -624,7 +442,7 @@ struct AboutPane: View {
 
     private var version: String {
         let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-        return "Version \(short) (\(Bundle.main.buildNumber))"
+        return JotL10n.format("Version %@ (%@)", String(describing: short), String(describing: Bundle.main.buildNumber))
     }
 
     var body: some View {
@@ -645,20 +463,20 @@ struct AboutPane: View {
                     .foregroundStyle(JotUI.Colors.onSurfaceVariant)
             }
             HStack(spacing: 4) {
-                Text("Created by")
+                Text(JotL10n.text("Created by"))
                     .foregroundStyle(JotUI.Colors.onSurfaceVariant)
                 Link("Ammaar Reshi", destination: JotLinks.author)
             }
             .font(JotUI.TypeScale.body())
 
             HStack(spacing: JotUI.Spacing.m) {
-                Link("Source", destination: JotLinks.repository)
-                Link("Privacy", destination: JotLinks.privacy)
-                Link("Report a bug", destination: JotLinks.issues)
+                Link(JotL10n.text("Source"), destination: JotLinks.repository)
+                Link(JotL10n.text("Privacy"), destination: JotLinks.privacy)
+                Link(JotL10n.text("Report a bug"), destination: JotLinks.issues)
             }
             .font(JotUI.TypeScale.body())
 
-            Text("Open source under the Apache License 2.0.\nThis is not an officially supported Google product.")
+            Text(JotL10n.text("Open source under the Apache License 2.0.\nThis is not an officially supported Google product."))
                 .font(JotUI.TypeScale.labelSmall())
                 .foregroundStyle(JotUI.Colors.onSurfaceVariant)
                 .multilineTextAlignment(.center)

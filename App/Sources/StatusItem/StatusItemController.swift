@@ -141,22 +141,22 @@ final class StatusItemController: NSObject {
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
 
-        let status = NSMenuItem(title: "Starting up…", action: nil, keyEquivalent: "")
+        let status = NSMenuItem(title: JotL10n.text("Starting up…"), action: nil, keyEquivalent: "")
         status.isEnabled = false
         statusLine = status
         menu.addItem(status)
 
         menu.addItem(.separator())
 
-        let handsFree = NSMenuItem(title: "Start Hands-Free Dictation", action: #selector(startHandsFree), keyEquivalent: "")
+        let handsFree = NSMenuItem(title: JotL10n.text("Start Hands-Free Dictation"), action: #selector(startHandsFree), keyEquivalent: "")
         handsFree.target = self
         menu.addItem(handsFree)
 
-        let pasteLast = NSMenuItem(title: "Paste Last Transcript", action: #selector(pasteLastTranscript), keyEquivalent: "")
+        let pasteLast = NSMenuItem(title: JotL10n.text("Paste Last Transcript"), action: #selector(pasteLastTranscript), keyEquivalent: "")
         pasteLast.target = self
         menu.addItem(pasteLast)
 
-        let history = NSMenuItem(title: "History…", action: #selector(openHistory), keyEquivalent: "")
+        let history = NSMenuItem(title: JotL10n.text("История…"), action: #selector(openHistory), keyEquivalent: "")
         history.target = self
         menu.addItem(history)
 
@@ -164,23 +164,23 @@ final class StatusItemController: NSObject {
 
         // Which mic Jot hears through — moves the SYSTEM default input, exactly
         // like Control Center, so AirPods vs built-in is one click (dogfood).
-        let micItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
-        let micMenu = NSMenu(title: "Microphone")
+        let micItem = NSMenuItem(title: JotL10n.text("Microphone"), action: nil, keyEquivalent: "")
+        let micMenu = NSMenu(title: JotL10n.text("Microphone"))
         micMenu.delegate = self
         micItem.submenu = micMenu
         menu.addItem(micItem)
 
-        let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        let settings = NSMenuItem(title: JotL10n.text("Настройки…"), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
 
         menu.addItem(.separator())
 
-        let about = NSMenuItem(title: "About Jot", action: #selector(openAbout), keyEquivalent: "")
+        let about = NSMenuItem(title: JotL10n.text("About Jot"), action: #selector(openAbout), keyEquivalent: "")
         about.target = self
         menu.addItem(about)
 
-        let quit = NSMenuItem(title: "Quit Jot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quit = NSMenuItem(title: JotL10n.text("Quit Jot"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
 
         return menu
@@ -216,12 +216,12 @@ extension StatusItemController: NSMenuDelegate {
     /// Rebuild the Microphone submenu each open — devices come and go
     /// (AirPods connect, headsets unplug) and the checkmark must be live.
     func menuNeedsUpdate(_ menu: NSMenu) {
-        guard menu.title == "Microphone" else { return }
+        guard menu.title == JotL10n.text("Microphone") else { return }
         menu.removeAllItems()
         let current = AudioInputDevices.currentDefaultID()
         let devices = AudioInputDevices.list()
         if devices.isEmpty {
-            let none = NSMenuItem(title: "No microphones found", action: nil, keyEquivalent: "")
+            let none = NSMenuItem(title: JotL10n.text("No microphones found"), action: nil, keyEquivalent: "")
             none.isEnabled = false
             menu.addItem(none)
             return
@@ -234,7 +234,7 @@ extension StatusItemController: NSMenuDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        let note = NSMenuItem(title: "Sets your Mac's input device", action: nil, keyEquivalent: "")
+        let note = NSMenuItem(title: JotL10n.text("Sets your Mac's input device"), action: nil, keyEquivalent: "")
         note.isEnabled = false
         menu.addItem(note)
     }

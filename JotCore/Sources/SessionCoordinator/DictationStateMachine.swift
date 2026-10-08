@@ -35,6 +35,7 @@ public enum DictationFailure: Equatable, Sendable {
     case rateLimited
     /// 429 with a hard (daily) quota (F5).
     case quotaExhausted
+    case insufficientBalance
     /// Deadline exceeded per TimeoutPolicy (F7).
     case timeout
     /// Validation gate failed even after the verbatim retry (F9a/F10).

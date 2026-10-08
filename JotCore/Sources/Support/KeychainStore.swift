@@ -22,9 +22,8 @@ import Security
 /// (Superwhisper's documented failure).
 public enum KeychainStore {
     private static let service = "com.ammaar.jot"
-    private static let account = "gemini-api-key"
 
-    private static func baseQuery(dataProtection: Bool) -> [String: Any] {
+    private static func baseQuery(dataProtection: Bool, account: String) -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -36,9 +35,9 @@ public enum KeychainStore {
         return query
     }
 
-    public static func loadAPIKey() -> String? {
+    public static func loadAPIKey(account: String = "gemini-api-key") -> String? {
         for dataProtection in [true, false] {
-            var query = baseQuery(dataProtection: dataProtection)
+            var query = baseQuery(dataProtection: dataProtection, account: account)
             query[kSecReturnData as String] = true
             query[kSecMatchLimit as String] = kSecMatchLimitOne
             var item: CFTypeRef?
@@ -51,11 +50,11 @@ public enum KeychainStore {
     }
 
     @discardableResult
-    public static func saveAPIKey(_ key: String) -> Bool {
-        deleteAPIKey()
+    public static func saveAPIKey(_ key: String, account: String = "gemini-api-key") -> Bool {
+        deleteAPIKey(account: account)
         for dataProtection in [true, false] {
-            var attributes = baseQuery(dataProtection: dataProtection)
-            attributes[kSecAttrLabel as String] = "Jot — Gemini API key"
+            var attributes = baseQuery(dataProtection: dataProtection, account: account)
+            attributes[kSecAttrLabel as String] = JotL10n.text("Jot — ключ API")
             attributes[kSecValueData as String] = Data(key.utf8)
             if dataProtection {
                 attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
@@ -76,10 +75,10 @@ public enum KeychainStore {
     }
 
     @discardableResult
-    public static func deleteAPIKey(notify: Bool = false) -> Bool {
+    public static func deleteAPIKey(notify: Bool = false, account: String = "gemini-api-key") -> Bool {
         var deleted = false
         for dataProtection in [true, false] {
-            let status = SecItemDelete(baseQuery(dataProtection: dataProtection) as CFDictionary)
+            let status = SecItemDelete(baseQuery(dataProtection: dataProtection, account: account) as CFDictionary)
             deleted = deleted || status == errSecSuccess
         }
         // saveAPIKey's internal delete-before-add must not announce "key removed"

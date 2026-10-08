@@ -22,7 +22,7 @@ import JotCore
 /// Cleaned/Raw, audio playback, retry, delete.
 struct HistoryPane: View {
     let store: HistoryStore
-    let onRetry: (DictationRecord) -> Void
+    let onRetry: (DictationRecord, Bool) -> Void
 
     @State private var query = ""
     @State private var records: [DictationRecord] = []
@@ -54,7 +54,8 @@ struct HistoryPane: View {
         .sheet(item: $detailRecord) { record in
             RecordDetailSheet(
                 record: record,
-                onRetry: { onRetry(record) },
+                onRetry: { onRetry(record, false) },
+                onReprocess: { onRetry(record, true) },
                 onDelete: {
                     store.delete(id: record.id, removeFolder: true)
                     detailRecord = nil
@@ -69,9 +70,9 @@ struct HistoryPane: View {
     private var header: some View {
         VStack(spacing: JotUI.Spacing.s) {
             HStack(spacing: JotUI.Spacing.xl) {
-                stat(value: "\(stats.totalWords)", label: "words dictated")
+                stat(value: "\(stats.totalWords)", label: JotL10n.text("words dictated"))
                 stat(value: "\(stats.totalDictations)", label: "dictations")
-                stat(value: stats.averageWPM > 0 ? "\(stats.averageWPM)" : "—", label: "avg WPM")
+                stat(value: stats.averageWPM > 0 ? "\(stats.averageWPM)" : "—", label: JotL10n.text("avg WPM"))
                 Spacer()
                 HStack(spacing: 3) {
                     ForEach(0..<4, id: \.self) { index in
@@ -83,7 +84,7 @@ struct HistoryPane: View {
             HStack(spacing: JotUI.Spacing.xs) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                TextField("Search your dictations", text: $query)
+                TextField(JotL10n.text("Search your dictations"), text: $query)
                     .textFieldStyle(.plain)
                     .font(JotUI.TypeScale.body(grad: grad))
                     .onChange(of: query) { _, _ in reload() }
@@ -112,6 +113,7 @@ struct HistoryPane: View {
 
     private var groupedTimeline: [(day: String, items: [DictationRecord])] {
         let formatter = DateFormatter()
+        formatter.locale = JotL10n.locale
         formatter.dateStyle = .medium
         formatter.doesRelativeDateFormatting = true
         var groups: [(String, [DictationRecord])] = []
@@ -150,7 +152,7 @@ struct HistoryPane: View {
                         attentionRow(record)
                     }
                     if attention.count > 3 {
-                        Button(showAllAttention ? "Show less" : "Show \(attention.count - 3) more") {
+                        Button(showAllAttention ? JotL10n.text("Show less") : JotL10n.format("Show %@ more", String(describing: attention.count - 3))) {
                             showAllAttention.toggle()
                         }
                         .buttonStyle(.link)
@@ -159,20 +161,20 @@ struct HistoryPane: View {
                 } header: {
                     HStack(spacing: JotUI.Spacing.xxs) {
                         Circle().fill(JotUI.Colors.gYellow).frame(width: 6, height: 6)
-                        Text("Needs attention (\(attention.count))")
+                        Text(JotL10n.format("Needs attention (%@)", String(describing: attention.count)))
                             .font(JotUI.TypeScale.labelSmall(grad: grad))
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Button("Discard All") {
+                        Button(JotL10n.text("Discard All")) {
                             confirmingDiscardAll = true
                         }
                         .buttonStyle(.link)
                         .font(JotUI.TypeScale.labelSmall(grad: grad))
                         .confirmationDialog(
-                            "Discard all \(attention.count) recordings that need attention? Their audio will be deleted.",
+                            JotL10n.format("Discard all %@ recordings that need attention? Their audio will be deleted.", String(describing: attention.count)),
                             isPresented: $confirmingDiscardAll
                         ) {
-                            Button("Discard \(attention.count) Recordings", role: .destructive) {
+                            Button(JotL10n.format("Discard %@ Recordings", String(describing: attention.count)), role: .destructive) {
                                 for record in attention {
                                     store.delete(id: record.id, removeFolder: true)
                                 }
@@ -207,9 +209,9 @@ struct HistoryPane: View {
                 HStack(spacing: JotUI.Spacing.xs) {
                     if let app = record.targetAppName { Text(app) }
                     if let duration = record.durationSeconds {
-                        Text(String(format: "%.0fs of audio", duration))
+                        Text(String(format: JotL10n.text("%.0fs of audio"), duration))
                     }
-                    Text(record.startedAt.formatted(date: .abbreviated, time: .shortened))
+                    Text(record.startedAt.formatted(.dateTime.day().month().year().hour().minute().locale(JotL10n.locale)))
                 }
                 .font(JotUI.TypeScale.labelSmall(grad: grad))
                 .foregroundStyle(.secondary)
@@ -218,8 +220,8 @@ struct HistoryPane: View {
             // Retry needs something to retry: no audio and no transcript is a
             // dead-end button that can only re-fail (production pass 2).
             if audioExists(record) || record.rawTranscript != nil {
-                Button("Retry") {
-                    onRetry(record)
+                Button(JotL10n.text("Retry")) {
+                    onRetry(record, false)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -233,7 +235,7 @@ struct HistoryPane: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("Discard this recording")
+            .help(JotL10n.text("Discard this recording"))
         }
         .padding(.vertical, 3)
     }
@@ -244,20 +246,20 @@ struct HistoryPane: View {
 
     private func attentionTitle(_ record: DictationRecord) -> String {
         switch SessionMeta.Status(rawValue: record.status) {
-        case .queuedForRetry: return "Waiting for network"
+        case .queuedForRetry: return JotL10n.text("Waiting for network")
         case .cancelled:
             // Only claim "audio kept" when it actually is (retention truth).
             return audioExists(record)
-                ? "Cancelled recording — audio kept"
-                : "Cancelled recording — audio deleted by your retention setting"
+                ? JotL10n.text("Cancelled recording — audio kept")
+                : JotL10n.text("Cancelled recording — audio deleted by your retention setting")
         case .failed where record.errorCode == "audio_purged":
-            return "Audio was deleted by your retention setting"
+            return JotL10n.text("Audio was deleted by your retention setting")
         case .failed where record.errorCode == "tooNoisy":
-            return "Too noisy — no speech heard"
-        case .failed where record.errorCode == "bad_request": return "Couldn't process this one"
-        case .failed where record.errorCode == "model": return "Model not available to your key — see Settings → Advanced"
-        case .failed: return "Transcription failed"
-        default: return "Recovered recording"
+            return JotL10n.text("Too noisy — no speech heard")
+        case .failed where record.errorCode == "bad_request": return JotL10n.text("Couldn't process this one")
+        case .failed where record.errorCode == "model": return JotL10n.text("Model not available to your key — see Settings → Advanced")
+        case .failed: return JotL10n.text("Transcription failed")
+        default: return JotL10n.text("Recovered recording")
         }
     }
 
@@ -276,9 +278,9 @@ struct HistoryPane: View {
                             Text(app)
                         }
                         if let duration = record.durationSeconds {
-                            Text(String(format: "%.0fs", duration))
+                            Text(String(format: JotL10n.text("%.0f с"), duration))
                         }
-                        Text(record.startedAt.formatted(date: .omitted, time: .shortened))
+                        Text(record.startedAt.formatted(.dateTime.hour().minute().locale(JotL10n.locale)))
                     }
                     .font(JotUI.TypeScale.labelSmall(grad: grad))
                     .foregroundStyle(.secondary)
@@ -293,10 +295,10 @@ struct HistoryPane: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("Copy") { copy(record) }
-            Button("Retry Transcription") { onRetry(record) }
+            Button(JotL10n.text("Copy")) { copy(record) }
+            Button(JotL10n.text("Retry Transcription")) { onRetry(record, false) }
             Divider()
-            Button("Delete", role: .destructive) {
+            Button(JotL10n.text("Delete"), role: .destructive) {
                 store.delete(id: record.id, removeFolder: true)
                 reload()
             }
@@ -311,16 +313,16 @@ struct HistoryPane: View {
         case .awaitingChip:
             // Only trustworthy for a few minutes — the clipboard moves on.
             if Date().timeIntervalSince(record.startedAt) < 300 {
-                chip("Ready to paste", color: JotUI.Colors.primary)
+                chip(JotL10n.text("Ready to paste"), color: JotUI.Colors.primary)
             } else {
-                chip("Wasn't pasted", color: Color.secondary)
+                chip(JotL10n.text("Wasn't pasted"), color: Color.secondary)
             }
         case .recovered:
-            chip("Recovered", color: JotUI.Colors.primary)
+            chip(JotL10n.text("Recovered"), color: JotUI.Colors.primary)
         case .heldSecure:
-            chip("Kept — secure field", color: Color.secondary)
+            chip(JotL10n.text("Kept — secure field"), color: Color.secondary)
         case .cancelled:
-            chip("Cancelled", color: Color.secondary)
+            chip(JotL10n.text("Cancelled"), color: Color.secondary)
         default:
             EmptyView()
         }
@@ -329,15 +331,15 @@ struct HistoryPane: View {
     /// Human words, never raw enum values, in the detail sheet.
     static func statusDisplayName(_ record: DictationRecord) -> String {
         switch SessionMeta.Status(rawValue: record.status) {
-        case .inserted: return "Inserted at the cursor"
-        case .copiedToClipboard: return "Copied to the clipboard"
-        case .awaitingChip: return "Ready to paste"
-        case .recovered: return "Recovered — use Copy to grab the text"
-        case .heldSecure: return "Kept — secure field blocked insertion"
-        case .queuedForRetry: return "Queued — retries automatically"
-        case .cancelled: return "Cancelled"
-        case .failed: return "Failed"
-        case .silent: return "No speech detected"
+        case .inserted: return JotL10n.text("Inserted at the cursor")
+        case .copiedToClipboard: return JotL10n.text("Copied to the clipboard")
+        case .awaitingChip: return JotL10n.text("Ready to paste")
+        case .recovered: return JotL10n.text("Recovered — use Copy to grab the text")
+        case .heldSecure: return JotL10n.text("Kept — secure field blocked insertion")
+        case .queuedForRetry: return JotL10n.text("Queued — retries automatically")
+        case .cancelled: return JotL10n.text("Cancelled")
+        case .failed: return JotL10n.text("Failed")
+        case .silent: return JotL10n.text("No speech detected")
         case .recording, .recorded, .transcribing, .none: return record.status
         }
     }
@@ -361,9 +363,9 @@ struct HistoryPane: View {
                         .frame(width: 6, height: [18, 30, 24, 14][index])
                 }
             }
-            Text("Nothing here yet")
+            Text(JotL10n.text("Nothing here yet"))
                 .font(JotUI.TypeScale.title(grad: grad))
-            Text("Hold fn and say hello.")
+            Text(JotL10n.text("Hold fn and say hello."))
                 .font(JotUI.TypeScale.body(grad: grad))
                 .foregroundStyle(.secondary)
             Spacer()
@@ -391,6 +393,7 @@ struct HistoryPane: View {
 private struct RecordDetailSheet: View {
     let record: DictationRecord
     let onRetry: () -> Void
+    let onReprocess: () -> Void
     let onDelete: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -409,8 +412,8 @@ private struct RecordDetailSheet: View {
                 // model actually rewrote something.
                 if hasDistinctRaw {
                     Picker("", selection: $showRaw) {
-                        Text("Cleaned").tag(false)
-                        Text("Raw").tag(true)
+                        Text(JotL10n.text("Cleaned")).tag(false)
+                        Text(JotL10n.text("Raw")).tag(true)
                     }
                     .pickerStyle(.segmented)
                     .frame(width: 170)
@@ -421,7 +424,7 @@ private struct RecordDetailSheet: View {
                     pasteboard.clearContents()
                     pasteboard.setString(shownText, forType: .string)
                 } label: {
-                    Label("Copy", systemImage: "doc.on.doc")
+                    Label(JotL10n.text("Copy"), systemImage: "doc.on.doc")
                 }
             }
 
@@ -435,12 +438,16 @@ private struct RecordDetailSheet: View {
 
             HStack(spacing: JotUI.Spacing.s) {
                 audioButton
-                Button("Retry Transcription") { onRetry() }
+                Button(JotL10n.text("Retry Transcription")) { onRetry() }
+                    .help(JotL10n.text("Использует сохранённые URL, модель и язык этой записи."))
+                Button(JotL10n.text("С текущей моделью")) { onReprocess() }
+                    .disabled(!FileManager.default.fileExists(atPath: FileLayout.audioCAF(in: record.folderURL).path))
+                    .help(JotL10n.text("Повторно отправит аудио в выбранный сейчас API. Создаст новую запись в истории; запрос может быть платным."))
                 Spacer()
                 Button(role: .destructive) { onDelete() } label: {
                     Image(systemName: "trash")
                 }
-                .help("Delete this dictation")
+                .help(JotL10n.text("Delete this dictation"))
             }
 
             Divider()
@@ -448,32 +455,42 @@ private struct RecordDetailSheet: View {
             Grid(alignment: .leading, horizontalSpacing: JotUI.Spacing.l, verticalSpacing: 4) {
                 if let app = record.targetAppName {
                     GridRow {
-                        metaLabel("Dictated into"); metaValue(app)
+                        metaLabel(JotL10n.text("Dictated into")); metaValue(app)
                     }
                 }
+                if let provider = record.provider {
+                    GridRow { metaLabel(JotL10n.text("Провайдер")); metaValue(JotL10n.text(provider)) }
+                }
+                if let url = record.apiBaseURL {
+                    GridRow { metaLabel("API"); metaValue(url) }
+                }
+                if let model = record.modelID {
+                    GridRow { metaLabel(JotL10n.text("Модель")); metaValue(model) }
+                }
+                GridRow { metaLabel(JotL10n.text("Язык")); metaValue(record.language ?? JotL10n.text("Авто")) }
                 if let duration = record.durationSeconds {
                     GridRow {
-                        metaLabel("Duration"); metaValue(String(format: "%.1fs", duration))
+                        metaLabel(JotL10n.text("Duration")); metaValue(String(format: JotL10n.text("%.1f с"), duration))
                     }
                 }
                 if let pipeline = record.pipelineSeconds {
                     GridRow {
-                        metaLabel("Pipeline"); metaValue(String(format: "%.2fs", pipeline))
+                        metaLabel(JotL10n.text("Pipeline")); metaValue(String(format: JotL10n.text("%.2f с"), pipeline))
                     }
                 }
                 GridRow {
-                    metaLabel("Status"); metaValue(HistoryPane.statusDisplayName(record))
+                    metaLabel(JotL10n.text("Status")); metaValue(HistoryPane.statusDisplayName(record))
                 }
                 if let message = record.errorMessage, !message.isEmpty {
                     GridRow {
-                        metaLabel("Details"); metaValue(String(message.prefix(160)))
+                        metaLabel(JotL10n.text("Details")); metaValue(String(message.prefix(160)))
                     }
                 }
             }
 
             HStack {
                 Spacer()
-                Button("Done") { dismiss() }
+                Button(JotL10n.text("Done")) { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -505,11 +522,11 @@ private struct RecordDetailSheet: View {
                     player?.play()
                 }
             } label: {
-                Label(player?.isPlaying == true ? "Stop" : "Play Audio",
+                Label(player?.isPlaying == true ? JotL10n.text("Stop") : JotL10n.text("Play Audio"),
                       systemImage: player?.isPlaying == true ? "stop.fill" : "play.fill")
             }
         } else {
-            Text("Audio removed by retention policy")
+            Text(JotL10n.text("Audio removed by retention policy"))
                 .font(JotUI.TypeScale.labelSmall(grad: grad))
                 .foregroundStyle(.secondary)
         }

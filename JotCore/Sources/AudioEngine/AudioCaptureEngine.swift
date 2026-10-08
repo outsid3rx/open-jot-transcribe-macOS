@@ -345,7 +345,7 @@ public final class AudioCaptureEngine: AudioCapturing {
             self.rebuildCount += 1
             guard self.rebuildCount <= self.maxRebuildsPerSession else {
                 Log.audio.error("AudioCaptureEngine: rebuild circuit breaker tripped (\(self.rebuildCount)) — leaving engine down; captured audio is preserved")
-                self.onEngineDied?("Mic kept reconnecting")
+                self.onEngineDied?(JotL10n.text("Микрофон постоянно переподключается"))
                 return
             }
             let seam = Double(frames) / self.targetFormat.sampleRate
@@ -357,7 +357,7 @@ public final class AudioCaptureEngine: AudioCapturing {
                 self.stateLock.lock()
                 self.gapMarkers.append(seam)
                 self.stateLock.unlock()
-                self.onDeviceChange?("Mic changed — kept recording")
+                self.onDeviceChange?(JotL10n.text("Микрофон сменился — запись продолжается"))
                 Log.audio.warning("AudioCaptureEngine: input device changed at \(seam, format: .fixed(precision: 2))s — continuing on new default")
             } else {
                 Log.audio.info("AudioCaptureEngine: config change on same device — rebuilding")
@@ -366,7 +366,7 @@ public final class AudioCaptureEngine: AudioCapturing {
                 try self.buildAndStartEngine(reason: "config-change")
             } catch {
                 Log.audio.error("AudioCaptureEngine: rebuild failed: \(error)")
-                self.onEngineDied?("Mic disconnected")
+                self.onEngineDied?(JotL10n.text("Микрофон отключён"))
             }
         }
     }

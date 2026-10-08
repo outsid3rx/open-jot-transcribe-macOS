@@ -19,15 +19,14 @@ import XCTest
 /// surfaces can re-render the moment a toggle flips (dogfood: "I turned the
 /// resting indicator on and off and it didn't work").
 final class SettingsLiveUpdateTests: XCTestCase {
-    private let settings = SettingsStore()
+    private let defaults = UserDefaults(suiteName: "SettingsLiveUpdateTests")!
+    private var settings: SettingsStore { SettingsStore(defaults: defaults) }
 
     override func tearDown() {
-        for key in ["showIdleIndicator", "soundsEnabled", "doubleTapLock", "gateTrips",
-                    "experimentalNoiseHandling", "smartTranscription", "smartCleanupPass",
-                    "legacyTranscribeEndpoint"] {
-            UserDefaults.standard.removeObject(forKey: key)
-        }
+        defaults.removePersistentDomain(forName: "SettingsLiveUpdateTests")
     }
+
+    override func setUp() { defaults.removePersistentDomain(forName: "SettingsLiveUpdateTests") }
 
     private func expectChange(forKey key: String, during action: () -> Void) {
         let posted = expectation(description: "gtSettingDidChange(\(key))")
@@ -53,20 +52,21 @@ final class SettingsLiveUpdateTests: XCTestCase {
         expectChange(forKey: "hotkeyKey") { settings.setHotkeyKey(.fn) }
         expectChange(forKey: "audioRetentionDays") { settings.setAudioRetentionDays(7) }
         expectChange(forKey: "experimentalNoiseHandling") { settings.setExperimentalNoiseHandling(true) }
+        expectChange(forKey: "interfaceLanguage") { settings.setInterfaceLanguage(.english) }
     }
 
     func testManualReEnableClearsGateTrips() {
         // Three trips inside the window = degraded.
-        _ = settings.recordGateTrip()
-        _ = settings.recordGateTrip()
-        XCTAssertEqual(settings.recordGateTrip(), 3)
+        _ = settings.recordCleanupGateTrip(endpoint: settings.transcriptionConfiguration.effectiveCleanup)
+        _ = settings.recordCleanupGateTrip(endpoint: settings.transcriptionConfiguration.effectiveCleanup)
+        XCTAssertEqual(settings.recordCleanupGateTrip(endpoint: settings.transcriptionConfiguration.effectiveCleanup), 3)
         // The user deliberately re-enables the tone pass: the slate must be clean,
         // or a single further trip instantly re-degrades and their choice loses.
         // (This clear moved from setSmartFormatting when auto-degrade re-pointed
         // at the opt-in pass — if it had not moved, this test would still pass on
         // the old key while the real behaviour silently regressed.)
         settings.setSmartCleanupPass(true)
-        XCTAssertEqual(settings.recordGateTrip(), 1)
+        XCTAssertEqual(settings.recordCleanupGateTrip(endpoint: settings.transcriptionConfiguration.effectiveCleanup), 1)
     }
 }
 

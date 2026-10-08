@@ -104,7 +104,7 @@ struct PillView: View {
                     HStack(spacing: JotUI.Spacing.s) {
                         WaveformView(level: 0, processing: true)
                         if model.slow {
-                            Text("Still working…")
+                            Text(JotL10n.text("Still working…"))
                                 .font(JotUI.TypeScale.label())
                                 .foregroundStyle(JotUI.Colors.onSurfaceVariant)
                                 .transition(.opacity)
@@ -195,7 +195,7 @@ struct PillView: View {
             .frame(width: 32, height: 32)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Stop dictation and insert text")
+        .accessibilityLabel(JotL10n.text("Stop dictation and insert text"))
     }
 
     private func successBadge(words: Int?) -> some View {
@@ -207,7 +207,7 @@ struct PillView: View {
                 .frame(width: 48, height: 48)
                 .gtGlassCircle()
             if let words, words > 20 {
-                Text("\(words) words")
+                Text(JotL10n.wordCount(words))
                     .font(JotUI.TypeScale.labelSmall())
                     .foregroundStyle(JotUI.Colors.onSurfaceVariant)
             }
@@ -240,13 +240,13 @@ struct PillView: View {
 
     private var accessibilityDescription: String {
         switch model.state {
-        case .hidden, .idleDot: return "Jot — ready"
-        case .listening(true): return "Listening — hands-free locked"
-        case .listening(false): return "Listening"
-        case .processing: return "Processing"
-        case .success(let words): return "Inserted\(words.map { " \($0) words" } ?? "")"
+        case .hidden, .idleDot: return JotL10n.text("Jot — ready")
+        case .listening(true): return JotL10n.text("Listening — hands-free locked")
+        case .listening(false): return JotL10n.text("Listening")
+        case .processing: return JotL10n.text("Processing")
+        case .success(let words): return JotL10n.format("Inserted%@", words.map { " " + JotL10n.wordCount($0) } ?? "")
         case .notice(let message): return message
-        case .error(let message): return "Error — \(message)"
+        case .error(let message): return JotL10n.format("Error — %@", String(describing: message))
         }
     }
 }
@@ -278,7 +278,7 @@ private struct IdleDotView: View {
                 Image(systemName: "mic.fill")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(JotUI.Colors.gBlue)
-                Text("Dictate")
+                Text(JotL10n.text("Dictate"))
                     .font(JotUI.TypeScale.label())
                     .foregroundStyle(JotUI.Colors.onSurface)
                     .fixedSize()
@@ -299,8 +299,8 @@ private struct IdleDotView: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help("Start hands-free dictation")
-        .accessibilityLabel("Start hands-free dictation")
+        .help(JotL10n.text("Start hands-free dictation"))
+        .accessibilityLabel(JotL10n.text("Start hands-free dictation"))
     }
 }
 

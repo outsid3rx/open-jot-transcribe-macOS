@@ -17,6 +17,7 @@
 name: Jot
 options:
   createIntermediateGroups: true
+  developmentLanguage: ru
   deploymentTarget:
     macOS: "14.0"
 
@@ -56,6 +57,10 @@ targets:
           CODE_SIGNING_REQUIRED: NO
     sources:
       - path: App/Sources
+      - path: App/Resources/ru.lproj
+        buildPhase: resources
+      - path: App/Resources/en.lproj
+        buildPhase: resources
       - path: App/Resources/Jot.icns
       # Folder references (blue folders) so bundle subdirectory structure is preserved:
       # Contents/Resources/Fonts/GoogleSansFlex/… etc.
@@ -78,7 +83,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.productivity
         LSUIElement: true # menu bar app: no Dock icon
-        NSMicrophoneUsageDescription: Jot records audio while you hold the dictation key, so it can transcribe what you say.
+        NSMicrophoneUsageDescription: Jot записывает звук, пока вы удерживаете клавишу диктовки, чтобы преобразовать речь в текст.
         NSHumanReadableCopyright: "Copyright 2026 Google LLC. Apache License 2.0. This is not an officially supported Google product."
         LSMinimumSystemVersion: "14.0"
         CFBundleURLTypes:

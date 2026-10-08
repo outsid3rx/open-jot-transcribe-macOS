@@ -23,11 +23,7 @@ public struct GeminiConfig: Sendable, Equatable {
 
     public init(
         endpoint: URL = URL(string: "https://generativelanguage.googleapis.com")!,
-        // PRODUCT DECISION, not a tunable default: Jot ships on
-        // gemini-3.5-transcribe. Do not swap it, and do not add automatic
-        // substitution — no other model is this product. (The name that 404'd
-        // on 2026-08-18 was the -preview suffix; the graduated name is this
-        // one.) A user can still pin something else in Settings → Advanced.
+        // Defaults retained for existing installations and opt-in Gemini probes.
         transcribeModel: String = "gemini-3.5-transcribe",
         cleanupModel: String = "gemini-3.5-flash-lite"
     ) {
@@ -64,7 +60,7 @@ public actor GeminiClient {
         let config = URLSessionConfiguration.ephemeral
         config.waitsForConnectivity = false // fail fast into the retry/queue path
         config.timeoutIntervalForResource = 600
-        self.session = URLSession(configuration: config)
+        self.session = URLSession(configuration: config, delegate: CredentialRedirectGuard(), delegateQueue: nil)
         self.apiKey = apiKey
     }
 
@@ -119,14 +115,11 @@ public actor GeminiClient {
         return try await generateContent(body: body, model: model, endpoint: endpoint, deadline: deadline)
     }
 
-    /// Cheap key validation for onboarding/Settings.
+    /// Gemini key validation used by opt-in probe tests.
     /// Why a key check failed, because "false" is not enough to act on.
     ///
-    /// Onboarding must let someone past a check it could not perform (a captive
-    /// portal, a VPN coming up) while HARD-BLOCKING a key the server actively
-    /// rejected. Collapsing both into `false` is what let a bad key through: the
-    /// caller fell back to a 1-second reachability probe that false-negatives on
-    /// a cold NWPathMonitor, then saved the key anyway.
+    /// Used by opt-in Gemini probes. The app saves keys without claiming
+    /// that a public model catalog validates access to a particular model.
     public enum KeyCheck: Equatable, Sendable {
         case valid
         /// The server answered, and the answer was no. Never advance on this.
@@ -155,20 +148,6 @@ public actor GeminiClient {
         default:
             return .rejected(Self.errorMessage(from: data))
         }
-    }
-
-    /// First model in `candidates` this key can actually reach, or nil if none.
-    /// Onboarding runs this so "your key works" means the whole pipeline works,
-    /// not just that the key authenticates.
-    public func resolveAvailableModel(from candidates: [String], endpoint: URL) async -> String? {
-        for model in candidates {
-            var request = URLRequest(url: endpoint.appendingPathComponent("v1beta/models/\(model)"))
-            request.timeoutInterval = 8
-            applyAuth(&request)
-            guard let (_, response) = try? await session.data(for: request) else { continue }
-            if (response as? HTTPURLResponse)?.statusCode == 200 { return model }
-        }
-        return nil
     }
 
     // MARK: - Core
@@ -341,7 +320,7 @@ public actor GeminiClient {
     /// interactions envelope: {"id","status","steps":[{"type","content":[{"type","text"}]}],"usage"}
     ///
     /// Empty text is returned as "" rather than thrown, exactly as `extractText`
-    /// does — GeminiTranscriptionService owns the empty-transcript retry and the
+    /// does — TranscriptionService owns the empty-transcript retry and the
     /// coordinator classifies silence by audio energy. Throwing here would route
     /// a quiet dictation into the failure path instead.
     static func extractInteractionText(from data: Data) throws -> String {

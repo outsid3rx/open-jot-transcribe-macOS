@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // AFTER LegacyMigration: smartFormatting is in its key list and has to be
         // pulled out of the old defaults domain before this reads it.
         FormattingSettingsMigration.runIfNeeded()
+        SettingsStore().migrateAPISettings()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

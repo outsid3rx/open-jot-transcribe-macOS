@@ -43,7 +43,7 @@ public enum SecureInput {
 
         for session in property {
             guard let raw = session["kCGSSessionSecureInputPID"] as? Int32, raw != 0 else { continue }
-            return (raw, name(of: raw) ?? "another app")
+            return (raw, name(of: raw) ?? JotL10n.text("another app"))
         }
         return nil
     }
@@ -54,12 +54,12 @@ public enum SecureInput {
     public static func advice(forHolder name: String) -> String {
         let lowered = name.lowercased()
         if lowered.contains("loginwindow") {
-            return "Lock your screen and unlock it to clear this."
+            return JotL10n.text("Lock your screen and unlock it to clear this.")
         }
         if lowered.contains("terminal") || lowered.contains("iterm") {
-            return "Turn off Secure Keyboard Entry in \(name)'s menu."
+            return JotL10n.format("Turn off Secure Keyboard Entry in %@'s menu.", String(describing: name))
         }
-        return "Click out of any password field in \(name)."
+        return JotL10n.format("Click out of any password field in %@.", String(describing: name))
     }
 
     private static func name(of pid: pid_t) -> String? {

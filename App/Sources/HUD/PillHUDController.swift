@@ -94,8 +94,8 @@ final class PillHUDController {
         }), let bounds = info[kCGWindowBounds as String] as? [String: CGFloat] else {
             return nil
         }
-        let midX = (bounds["X"] ?? 0) + (bounds["Width"] ?? 0) / 2
-        let midY = (bounds["Y"] ?? 0) + (bounds["Height"] ?? 0) / 2
+        let midX = (bounds["X"] ?? 0) + (bounds[JotL10n.text("Width")] ?? 0) / 2
+        let midY = (bounds["Y"] ?? 0) + (bounds[JotL10n.text("Height")] ?? 0) / 2
         // Window-list coords are top-left-origin global; flip into Cocoa space.
         guard let primary = NSScreen.screens.first else { return nil }
         let cocoaPoint = NSPoint(x: midX, y: primary.frame.maxY - midY)

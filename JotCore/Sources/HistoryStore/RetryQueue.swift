@@ -23,19 +23,20 @@ import Network
 public final class RetryQueue {
     private let store: HistoryStore
     private let transcription: TranscriptionServicing
+    private let settings: SettingsStore
     private let monitor = NWPathMonitor()
     private var draining = false
     private var lastPathSatisfied = false
 
     public var onDrained: ((Int) -> Void)?
-    /// Fired once per blocked drain: the queue hit an account-level wall
-    /// (auth/daily quota) — rows KEEP their queued promise and retry on the
+    /// Fired once per blocked API profile (auth/quota/balance) — rows KEEP their queued promise and retry on the
     /// next external signal (launch, network flap, key change).
     public var onDrainBlocked: ((TranscriptionError) -> Void)?
 
-    public init(store: HistoryStore, transcription: TranscriptionServicing) {
+    public init(store: HistoryStore, transcription: TranscriptionServicing, settings: SettingsStore = SettingsStore()) {
         self.store = store
         self.transcription = transcription
+        self.settings = settings
     }
 
     public func start() {
@@ -63,8 +64,12 @@ public final class RetryQueue {
         let retryable = store.retryableRecords()
         guard !retryable.isEmpty else { return }
         var recoveredCount = 0
-
+        var blockedAccounts = Set<String>()
         for record in retryable {
+            let configuration = SessionMeta.read(from: record.folderURL)?.configuration ?? settings.legacyTranscriptionConfiguration
+            let account = configuration.recognition.credentialAccount
+            guard !blockedAccounts.contains(account) else { continue }
+
             switch await process(record) {
             case .recovered:
                 recoveredCount += 1
@@ -73,13 +78,11 @@ public final class RetryQueue {
                 if recoveredCount > 0 { onDrained?(recoveredCount) }
                 return
             case .blocked(let error):
-                // Auth/daily-quota walls apply to every remaining row: stop, keep
-                // their queued status, tell the user ONCE — never silently convert
-                // "will retry automatically" into permanent failures.
+                // Skip this credential profile, while other providers can proceed.
                 Log.history.warning("RetryQueue: drain blocked (\(String(describing: error))) — keeping queue intact")
-                if recoveredCount > 0 { onDrained?(recoveredCount) }
+                blockedAccounts.insert(account)
                 onDrainBlocked?(error)
-                return
+                continue
             case .failed, .skipped:
                 continue
             }
@@ -92,11 +95,34 @@ public final class RetryQueue {
     /// Manual per-item retry (History context menu) — works on any record.
     /// Shares the draining guard so a manual retry can't double-process a record
     /// the drain is already sending (audit L20).
-    public func retrySingle(_ record: DictationRecord) async -> RetryOutcome {
+    public func retrySingle(_ record: DictationRecord, useCurrentConfiguration: Bool = false) async -> RetryOutcome {
         guard !draining else { return .busy }
         draining = true
         defer { draining = false }
-        switch await process(record) {
+        var target = record
+        if useCurrentConfiguration {
+            // Explicit reprocessing creates a new history item; keep the old text intact.
+            do {
+                guard let old = SessionMeta.read(from: record.folderURL) else { return .failed }
+                let id = UUID()
+                let folder = try FileLayout.makeSessionFolder(id: id)
+                do {
+                    try FileManager.default.copyItem(at: FileLayout.audioCAF(in: record.folderURL), to: FileLayout.audioCAF(in: folder))
+                } catch {
+                    try? FileManager.default.removeItem(at: folder)
+                    return .failed
+                }
+                var meta = SessionMeta(id: id, startedAt: Date(), status: .queuedForRetry)
+                meta.configuration = settings.transcriptionConfiguration
+                meta.audioDurationSeconds = old.audioDurationSeconds
+                meta.targetAppBundleID = old.targetAppBundleID
+                meta.targetAppName = old.targetAppName
+                meta.write(to: folder)
+                store.upsert(meta: meta, folder: folder)
+                target = DictationRecord(meta: meta, folder: folder)
+            } catch { return .failed }
+        }
+        switch await process(target) {
         case .recovered:
             onDrained?(1)
             return .recovered
@@ -142,16 +168,25 @@ public final class RetryQueue {
             return .failed
         }
         do {
+            if meta.configuration == nil {
+                meta.configuration = settings.legacyTranscriptionConfiguration
+                meta.write(to: folder)
+            }
             let context = DictationContext(
                 targetAppBundleID: meta.targetAppBundleID,
-                targetAppName: meta.targetAppName
+                targetAppName: meta.targetAppName,
+                configuration: meta.configuration ?? settings.legacyTranscriptionConfiguration
             )
+            let store = self.store
             let result = try await transcription.transcribe(
                 audioURL: cafURL,
                 durationSeconds: meta.audioDurationSeconds
                     ?? FileLayout.estimatedDuration(ofCAF: cafURL)
                     ?? 60,
-                context: context
+                context: context,
+                onRawTranscript: { raw in
+                    await MainActor.run { store.preserveRawTranscript(raw, folder: folder) }
+                }
             )
             meta.rawTranscript = result.rawTranscript
             meta.cleanedTranscript = result.cleanedTranscript
@@ -162,11 +197,13 @@ public final class RetryQueue {
             meta.write(to: folder)
             store.upsert(meta: meta, folder: folder)
             return .recovered
+        } catch is CancellationError {
+            return .skipped
         } catch let error as TranscriptionError {
             switch error {
             case .offline, .network, .timeout, .rateLimitedTransient:
                 return .stillOffline
-            case .auth, .rateLimitedDaily:
+            case .auth, .rateLimitedDaily, .insufficientBalance:
                 // Account-level wall: NOT this row's fault. Keep its queued
                 // status untouched so the promise survives to the next drain.
                 return .blocked(error)

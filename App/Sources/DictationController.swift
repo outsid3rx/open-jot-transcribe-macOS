@@ -28,7 +28,7 @@ final class DictationController {
     private let engine = EventTapEngine(key: .fn)
     private let hud = PillHUDController()
     private let earcons = EarconPlayer()
-    private let transcriptionService: GeminiTranscriptionService
+    private let transcriptionService: TranscriptionService
     private let historyStore: HistoryStore?
     private var recoveryScanner: RecoveryScanner?
     private var retryQueue: RetryQueue?
@@ -52,9 +52,9 @@ final class DictationController {
     /// needs both the Keychain and the Dictionary, and the coordinator should
     /// know about neither.
     @MainActor
-    private static func makeLiveSession() -> LiveTranscribing? {
+    private static func makeLiveSession(configuration: TranscriptionConfiguration) -> LiveTranscribing? {
         let settings = SettingsStore()
-        guard settings.liveTranscriptionActive else { return nil }
+        guard settings.liveTranscription, configuration.permitsLive else { return nil }
         // A live path that is reliably broken is worse than one that is off: every
         // attempt costs a handshake and then the full upload anyway, so the user
         // pays latency on every dictation for a feature that never delivers. Stop
@@ -67,12 +67,12 @@ final class DictationController {
             )
             return nil
         }
-        guard let key = KeychainStore.loadAPIKey(), !key.isEmpty else { return nil }
+        guard let key = KeychainStore.loadAPIKey(account: configuration.recognition.credentialAccount), !key.isEmpty else { return nil }
         let dictionary = DictionaryStore()
         let session = LiveTranscriptionSession(
             transport: WebSocketTransport(apiKey: { key }),
             setup: LiveSetup(
-                smart: settings.smartTranscriptionEnabled,
+                smart: configuration.nativeSmart,
                 // The same terms the batch path biases with, so switching modes
                 // does not quietly change how someone's name gets spelled.
                 customVocabulary: dictionary.vocabulary()
@@ -87,8 +87,7 @@ final class DictationController {
 
     init() {
         KeychainStore.migrateDevKeyFileIfPresent()
-        let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
-        let service = GeminiTranscriptionService(client: client)
+        let service = TranscriptionService()
         transcriptionService = service
         historyStore = try? HistoryStore.standard()
         coordinator = DictationCoordinator(
@@ -116,7 +115,7 @@ final class DictationController {
     private var needsOnboarding: Bool {
         // A deliberate "I'll add it later" is remembered — the wizard must not
         // re-trap that user every launch; the menu bar carries the key nudge.
-        (KeychainStore.loadAPIKey() == nil && !SettingsStore().hasCompletedOnboarding)
+        (KeychainStore.loadAPIKey(account: SettingsStore().transcriptionConfiguration.recognition.credentialAccount) == nil && !SettingsStore().hasCompletedOnboarding)
             || !AXIsProcessTrusted()
             || AVCaptureDevice.authorizationStatus(for: .audio) != .authorized
     }
@@ -167,12 +166,7 @@ final class DictationController {
                 // direct notice would be stomped by the session's own transitions.
                 // Don't assert what we haven't read: with Smart transcription off,
                 // or on the legacy endpoint, "still on" would be a lie.
-                let settings = SettingsStore()
-                let stillSmart = settings.smartTranscriptionEnabled && !settings.usesLegacyTranscribeEndpoint
-                let tail = stillSmart
-                    ? "Smart transcription is still on."
-                    : "Re-enable it in Settings → Dictation."
-                self?.showBackgroundNotice("Turned off tone matching — the second model kept misfiring. \(tail)", for: 5.0, sound: nil)
+                self?.showBackgroundNotice(JotL10n.text("Очистка выключена: модель несколько раз изменила смысл текста. Исходная расшифровка сохранена. Включить снова: Настройки → API и модели."), for: 5.0, sound: nil)
             }
         }
 
@@ -229,12 +223,12 @@ final class DictationController {
     private func activateEngine() {
         if engine.start() {
             engineActive = true
-            if KeychainStore.loadAPIKey() == nil {
+            if KeychainStore.loadAPIKey(account: SettingsStore().transcriptionConfiguration.recognition.credentialAccount) == nil {
                 // New-user path: dictation can't work yet — say exactly where to go.
-                onStatusChange?("Add your Gemini API key in Settings → Advanced")
+                onStatusChange?(JotL10n.text("Добавьте ключ выбранного API в настройках"))
                 onStatusItemState?(.attention)
             } else {
-                onStatusChange?("Ready — hold \(SettingsStore().hotkeyKey.displayName) to dictate")
+                onStatusChange?(JotL10n.format("Ready — hold %@ to dictate", String(describing: SettingsStore().hotkeyKey.displayName)))
                 // Clear a lingering attention icon (auth failure, missing key).
                 onStatusItemState?(.idle)
                 warmEngines.prewarmNext()
@@ -249,7 +243,7 @@ final class DictationController {
             // lookup otherwise lands between transcript-ready and ⌘V.
             Task { @MainActor in PasteInserter.warmKeyboardLayout() }
         } else {
-            onStatusChange?("Grant Accessibility to enable the dictation key")
+            onStatusChange?(JotL10n.text("Grant Accessibility to enable the dictation key"))
             onStatusItemState?(.attention)
         }
     }
@@ -291,11 +285,11 @@ final class DictationController {
     /// placeholder ("Starting up…") in the menu bar.
     private func reportSetupIncomplete() {
         if !AXIsProcessTrusted() {
-            onStatusChange?("Grant Accessibility to enable the dictation key")
+            onStatusChange?(JotL10n.text("Grant Accessibility to enable the dictation key"))
         } else if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
-            onStatusChange?("Allow microphone access in System Settings to dictate")
+            onStatusChange?(JotL10n.text("Allow microphone access in System Settings to dictate"))
         } else {
-            onStatusChange?("Add your Gemini API key in Settings → Advanced")
+            onStatusChange?(JotL10n.text("Добавьте ключ выбранного API в настройках"))
         }
         onStatusItemState?(.attention)
     }
@@ -318,23 +312,26 @@ final class DictationController {
             applyHotkeySettings()
             // The menu-bar status line names the key — keep it truthful, but
             // never overwrite an attention message ("Grant Accessibility…").
-            if engineActive, KeychainStore.loadAPIKey() != nil {
-                onStatusChange?("Ready — hold \(SettingsStore().hotkeyKey.displayName) to dictate")
+            if engineActive, KeychainStore.loadAPIKey(account: SettingsStore().transcriptionConfiguration.recognition.credentialAccount) != nil {
+                onStatusChange?(JotL10n.format("Ready — hold %@ to dictate", String(describing: SettingsStore().hotkeyKey.displayName)))
             }
         case "accessibility":
             // Granted mid-onboarding: wake the engine so the Try-It screen works.
             if !engineActive {
                 activateEngine()
             }
-        case "apiKey":
-            if KeychainStore.loadAPIKey() != nil {
+        case "apiKey", "transcriptionConfiguration":
+            if key == "apiKey" {
+                Task { @MainActor [weak self] in await self?.retryQueue?.drain() }
+            }
+            if KeychainStore.loadAPIKey(account: SettingsStore().transcriptionConfiguration.recognition.credentialAccount) != nil {
                 // Covers the "I'll add it later" onboarding path, where the
                 // engine was never started: a key arriving in Settings must
                 // bring the whole app to life, not just flip a badge.
                 // engine.start() is reentrant; hud.show() is idempotent.
                 activateEngine()
             } else {
-                onStatusChange?("Add your Gemini API key in Settings → Advanced")
+                onStatusChange?(JotL10n.text("Добавьте ключ выбранного API в настройках"))
                 onStatusItemState?(.attention)
             }
         default:
@@ -371,16 +368,18 @@ final class DictationController {
         let queue = RetryQueue(store: historyStore, transcription: transcriptionService)
         queue.onDrained = { [weak self] count in
             let message = count == 1
-                ? "Your queued dictation is ready — it's in History"
-                : "\(count) queued dictations are ready — they're in History"
+                ? JotL10n.text("Your queued dictation is ready — it's in History")
+                : JotL10n.format("%@ queued dictations are ready — they're in History", String(describing: count))
             self?.showBackgroundNotice(message, for: 4.0, sound: .success)
         }
         queue.onDrainBlocked = { [weak self] error in
             let message: String
             if case .auth = error {
-                message = "Queued dictations are waiting — fix your API key in Settings → Advanced"
+                message = JotL10n.text("Queued dictations are waiting — fix your API key in Settings → Advanced")
+            } else if case .insufficientBalance = error {
+                message = JotL10n.text("Недостаточно средств у провайдера — записи сохранены в истории")
             } else {
-                message = "Daily quota reached — queued dictations will retry later"
+                message = JotL10n.text("Daily quota reached — queued dictations will retry later")
             }
             self?.showBackgroundNotice(message, for: 5.0, sound: nil)
         }
@@ -419,16 +418,16 @@ final class DictationController {
         if mainWindow == nil {
             mainWindow = MainWindowController(
                 store: historyStore,
-                onRetry: { [weak self] record in
+                onRetry: { [weak self] record, useCurrentConfiguration in
                     Task { @MainActor [weak self] in
                         guard let self, let queue = self.retryQueue else { return }
-                        switch await queue.retrySingle(record) {
+                        switch await queue.retrySingle(record, useCurrentConfiguration: useCurrentConfiguration) {
                         case .stillOffline:
-                            self.showNotice("Still offline — will retry automatically when you're back", for: 4.0, sound: nil)
+                            self.showNotice(JotL10n.text("Still offline — will retry automatically when you're back"), for: 4.0, sound: nil)
                         case .busy:
-                            self.showNotice("Already retrying your queued dictations…", for: 2.5, sound: nil)
+                            self.showNotice(JotL10n.text("Already retrying your queued dictations…"), for: 2.5, sound: nil)
                         case .failed:
-                            self.showNotice("Retry didn't work — the row has the details", for: 3.0, sound: nil)
+                            self.showNotice(JotL10n.text("Retry didn't work — the row has the details"), for: 3.0, sound: nil)
                         case .recovered, .blocked, .alreadyDone:
                             break // recovered → drain notice; blocked → onDrainBlocked notice
                         }
@@ -493,7 +492,7 @@ final class DictationController {
     func pasteLastTranscript() {
         guard let text = coordinator.lastResult else {
             // A silent no-op reads as a broken menu item.
-            showNotice("Nothing to paste yet — dictate something first", for: 2.5, sound: nil)
+            showNotice(JotL10n.text("Nothing to paste yet — dictate something first"), for: 2.5, sound: nil)
             return
         }
         Task { @MainActor [weak self] in
@@ -507,9 +506,9 @@ final class DictationController {
             case .inserted:
                 break
             case .fellBackToClipboard, .frontmostChanged:
-                self?.showNotice("Copied — press ⌘V to paste", for: 3.0, sound: nil)
+                self?.showNotice(JotL10n.text("Copied — press ⌘V to paste"), for: 3.0, sound: nil)
             case .blockedSecureField:
-                self?.showNotice("Secure input is on — can't paste here", for: 3.0, sound: nil)
+                self?.showNotice(JotL10n.text("Secure input is on — can't paste here"), for: 3.0, sound: nil)
             }
         }
     }
@@ -689,27 +688,27 @@ final class DictationController {
             dismissAfter(0.7)
         case .copiedToClipboard:
             earcons.play(.success)
-            showNotice("Copied — press ⌘V to paste", for: 4.0, sound: nil)
+            showNotice(JotL10n.text("Copied — press ⌘V to paste"), for: 4.0, sound: nil)
         case .awaitingChip:
-            showNotice("You switched apps — press ⌘V to paste", for: 5.0, sound: nil)
+            showNotice(JotL10n.text("You switched apps — press ⌘V to paste"), for: 5.0, sound: nil)
         case .heldForSecureField:
-            showNotice("Secure input is on — saved to History", for: 4.0, sound: nil)
+            showNotice(JotL10n.text("Secure input is on — saved to History"), for: 4.0, sound: nil)
         case .queuedForRetry:
-            showNotice("You're offline — saved to History", for: 4.0, sound: nil)
+            showNotice(JotL10n.text("You're offline — saved to History"), for: 4.0, sound: nil)
         case .silent:
             consecutiveSilentSessions += 1
             if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
-                showNotice("Microphone access is off — re-enable it in System Settings → Privacy & Security", for: 5.0, sound: nil)
+                showNotice(JotL10n.text("Microphone access is off — re-enable it in System Settings → Privacy & Security"), for: 5.0, sound: nil)
                 onStatusItemState?(.attention)
             } else if coordinator.lastSilenceReason == .tooNoisy {
                 // A loud room with nothing above it. The recording is kept, so say
                 // where it went — this is the one no-speech case with a Retry.
-                showNotice("Too noisy to make out speech — saved to History", for: 4.0, sound: nil)
+                showNotice(JotL10n.text("Too noisy to make out speech — saved to History"), for: 4.0, sound: nil)
             } else if consecutiveSilentSessions >= 2 {
                 // Twice in a row is a muted/zero-volume mic, not a quiet user.
-                showNotice("Didn't catch any speech — check your mic's input volume in System Settings", for: 5.0, sound: nil)
+                showNotice(JotL10n.text("Didn't catch any speech — check your mic's input volume in System Settings"), for: 5.0, sound: nil)
             } else {
-                showNotice("Didn't catch any speech", for: 2.0, sound: nil)
+                showNotice(JotL10n.text("Didn't catch any speech"), for: 2.0, sound: nil)
             }
         }
         if case .silent = outcome {} else {
@@ -750,11 +749,13 @@ final class DictationController {
         let key = "shouldAnnounceSmartRestored"
         guard UserDefaults.standard.bool(forKey: key) else { return }
         UserDefaults.standard.removeObject(forKey: key)
+        let config = SettingsStore().transcriptionConfiguration
+        guard config.recognition.provider == .gemini, config.recognition.recognitionAPI == .gemini, config.nativeSmart else { return }
         // showBackgroundNotice, not showNotice: bind() replays the coordinator's
         // current .idle state a moment after launch, which repaints the pill and
         // would stomp a directly-shown notice.
         showBackgroundNotice(
-            "Smart transcription is back on — the model does the formatting itself now.",
+            JotL10n.text("Smart transcription is back on — the model does the formatting itself now."),
             for: 5.0, sound: nil
         )
     }
@@ -856,25 +857,24 @@ final class DictationController {
 
     private static func copy(for failure: DictationFailure) -> String {
         switch failure {
-        case .network: return "Couldn't reach Gemini — saved to History"
+        case .network: return JotL10n.text("Couldn't reach Gemini — saved to History")
         case .auth:
-            return KeychainStore.loadAPIKey() == nil
-                ? "Add your Gemini API key in Settings — recording saved to History"
-                : "API key isn't working — saved to History"
+            return KeychainStore.loadAPIKey(account: SettingsStore().transcriptionConfiguration.recognition.credentialAccount) == nil
+                ? JotL10n.text("Добавьте ключ выбранного API в настройках — запись сохранена в истории")
+                : JotL10n.text("API key isn't working — saved to History")
         case .modelAccess:
-            return SettingsStore().transcribeModelOverride != nil
-                ? "That model isn't available to your key — check Settings → Advanced. Saved to History"
-                : "Your key can't use the transcription model yet — recording saved to History"
-        case .badRequest: return "Gemini rejected the request — saved to History"
-        case .rateLimited: return "Rate limited — History will retry it shortly"
-        case .noMicrophone: return "No microphone found — connect one to dictate"
-        case .quotaExhausted: return "Daily quota reached for your key — check Google AI Studio. Saved to History"
-        case .timeout: return "Timed out — saved to History"
-        case .validation: return "Couldn't transcribe — saved to History"
-        case .safetyBlocked: return "The API declined this one — saved to History"
-        case .noAudio: return "Mic didn't start in time — try again"
-        case .audio: return "Mic didn't start — try again"
-        case .storage: return "Disk problem — couldn't save the audio"
+            return JotL10n.text("That model isn't available to your key — check Settings → Advanced. Saved to History")
+        case .badRequest: return JotL10n.text("Провайдер отклонил запрос — проверьте URL, модель и язык. Запись сохранена в истории")
+        case .rateLimited: return JotL10n.text("Rate limited — History will retry it shortly")
+        case .noMicrophone: return JotL10n.text("No microphone found — connect one to dictate")
+        case .insufficientBalance: return JotL10n.text("Недостаточно средств у провайдера — запись сохранена в истории")
+        case .quotaExhausted: return JotL10n.text("Daily quota reached for your key — check Google AI Studio. Saved to History")
+        case .timeout: return JotL10n.text("Timed out — saved to History")
+        case .validation: return JotL10n.text("Couldn't transcribe — saved to History")
+        case .safetyBlocked: return JotL10n.text("The API declined this one — saved to History")
+        case .noAudio: return JotL10n.text("Mic didn't start in time — try again")
+        case .audio: return JotL10n.text("Mic didn't start — try again")
+        case .storage: return JotL10n.text("Disk problem — couldn't save the audio")
         }
     }
 }

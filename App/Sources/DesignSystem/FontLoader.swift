@@ -30,7 +30,7 @@ enum FontLoader {
         for url in fontURLs {
             var cfError: Unmanaged<CFError>?
             if !CTFontManagerRegisterFontsForURL(url as CFURL, .process, &cfError) {
-                let description = (cfError?.takeRetainedValue()).map(String.init(describing:)) ?? "unknown error"
+                let description = (cfError?.takeRetainedValue()).map(String.init(describing:)) ?? JotL10n.text("unknown error")
                 // kCTFontManagerErrorAlreadyRegistered is benign on relaunch-in-place.
                 Log.ui.warning("FontLoader: could not register \(url.lastPathComponent, privacy: .public): \(description, privacy: .public)")
             } else {

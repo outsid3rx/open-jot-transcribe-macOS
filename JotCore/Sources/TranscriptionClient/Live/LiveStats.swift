@@ -107,23 +107,23 @@ public struct LiveStats: Sendable {
     public var summary: String? {
         guard attempts > 0 else { return nil }
         let percent = Int((Double(successes) / Double(attempts) * 100).rounded())
-        var line = "Used live for \(successes) of the last \(attempts) dictations (\(percent)%)."
+        var line = JotL10n.format("Used live for %@ of the last %@ dictations (%@%).", String(describing: successes), String(describing: attempts), String(describing: percent))
         let worst = Fallback.allCases
             .map { ($0, count(of: $0)) }
             .filter { $0.1 > 0 }
             .max { $0.1 < $1.1 }
         if let worst, successes < attempts {
-            line += " Most fell back because \(Self.phrase(for: worst.0))."
+            line += JotL10n.format(" Most fell back because %@.", String(describing: Self.phrase(for: worst.0)))
         }
         return line
     }
 
     static func phrase(for reason: Fallback) -> String {
         switch reason {
-        case .neverOpened: return "the connection could not be opened"
-        case .droppedMidSession: return "the connection dropped mid-sentence"
-        case .truncated: return "audio arrived faster than it could be sent"
-        case .noFinal: return "the transcript did not arrive in time"
+        case .neverOpened: return JotL10n.text("the connection could not be opened")
+        case .droppedMidSession: return JotL10n.text("the connection dropped mid-sentence")
+        case .truncated: return JotL10n.text("audio arrived faster than it could be sent")
+        case .noFinal: return JotL10n.text("the transcript did not arrive in time")
         }
     }
 

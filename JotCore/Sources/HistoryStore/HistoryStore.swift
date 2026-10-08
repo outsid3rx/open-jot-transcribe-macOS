@@ -32,6 +32,10 @@ public struct DictationRecord: Codable, Equatable, Identifiable, FetchableRecord
     public var errorCode: String?
     public var errorMessage: String?
     public var pipelineSeconds: Double?
+    public var provider: String?
+    public var apiBaseURL: String?
+    public var modelID: String?
+    public var language: String?
 
     public var displayText: String {
         cleanedTranscript ?? rawTranscript ?? ""
@@ -54,6 +58,10 @@ public struct DictationRecord: Codable, Equatable, Identifiable, FetchableRecord
         self.errorCode = meta.errorCode
         self.errorMessage = meta.errorMessage
         self.pipelineSeconds = meta.pipelineSeconds
+        self.provider = meta.configuration?.recognition.provider.title
+        self.apiBaseURL = meta.configuration?.recognition.baseURL
+        self.modelID = meta.modelID ?? meta.configuration?.recognition.model
+        self.language = meta.configuration?.explicitLanguage
     }
 }
 
@@ -133,6 +141,14 @@ public final class HistoryStore: @unchecked Sendable {
                 t.add(column: "errorMessage", .text)
             }
         }
+        migrator.registerMigration("v3-apiMetadata") { db in
+            try db.alter(table: DictationRecord.databaseTableName) { t in
+                t.add(column: "provider", .text)
+                t.add(column: "apiBaseURL", .text)
+                t.add(column: "modelID", .text)
+                t.add(column: "language", .text)
+            }
+        }
         try migrator.migrate(queue)
     }
 
@@ -148,6 +164,14 @@ public final class HistoryStore: @unchecked Sendable {
         } catch {
             Log.history.error("HistoryStore: upsert failed: \(error)")
         }
+    }
+
+    /// Called before cleanup, so a crash or cancellation never loses the ASR text.
+    public func preserveRawTranscript(_ raw: String, folder: URL) {
+        guard var meta = SessionMeta.read(from: folder) else { return }
+        meta.rawTranscript = raw
+        meta.write(to: folder)
+        upsert(meta: meta, folder: folder)
     }
 
     public func delete(id: String, removeFolder: Bool) {
@@ -272,10 +296,10 @@ public final class HistoryStore: @unchecked Sendable {
     public func retryableRecords() -> [DictationRecord] {
         (try? queue.read { db in
             try DictationRecord
-                .filter(sql: "status = ? OR (status = ? AND errorCode IN (?, ?, ?))",
+                .filter(sql: "status = ? OR (status = ? AND errorCode IN (?, ?, ?, ?, ?, ?))",
                         arguments: [SessionMeta.Status.queuedForRetry.rawValue,
                                     SessionMeta.Status.failed.rawValue,
-                                    "network", "timeout", "rate_limit"])
+                                    "network", "timeout", "rate_limit", "auth", "quota", "balance"])
                 .order(sql: "startedAt ASC")
                 .fetchAll(db)
         }) ?? []

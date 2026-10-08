@@ -35,14 +35,14 @@ public struct DictionaryEntry: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-public struct DictionaryStore: Sendable {
+public struct DictionaryStore: @unchecked Sendable {
     private static let key = "dictionaryEntries"
-    private static let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
 
-    public init() {}
+    public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
 
     public func entries() -> [DictionaryEntry] {
-        guard let data = Self.defaults.data(forKey: Self.key),
+        guard let data = defaults.data(forKey: Self.key),
               let entries = try? JSONDecoder().decode([DictionaryEntry].self, from: data) else {
             return []
         }
@@ -51,7 +51,7 @@ public struct DictionaryStore: Sendable {
 
     public func save(_ entries: [DictionaryEntry]) {
         if let data = try? JSONEncoder().encode(entries) {
-            Self.defaults.set(data, forKey: Self.key)
+            defaults.set(data, forKey: Self.key)
         }
     }
 

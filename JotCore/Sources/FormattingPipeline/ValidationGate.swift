@@ -47,7 +47,7 @@ public enum ValidationGate {
             s = s.replacingOccurrences(of: "```", with: "")
             s = s.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        for label in ["CLEAN:", "Clean:", "Transcript:", "TRANSCRIPT:"] where s.hasPrefix(label) {
+        for label in ["CLEAN:", "Clean:", "Transcript:", "TRANSCRIPT:", "Текст:", "Расшифровка:"] where s.hasPrefix(label) {
             s = String(s.dropFirst(label.count)).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         if s.count > 1, s.hasPrefix("\""), s.hasSuffix("\"") {
@@ -104,7 +104,7 @@ public enum ValidationGate {
     // MARK: - Text plumbing
 
     private static let answerPattern = try! NSRegularExpression(
-        pattern: #"^(sure|okay|certainly|of course|great question|here('s| is)|i can('|no)t|as an ai|i'm (sorry|an ai))\b"#,
+        pattern: #"^(sure|okay|certainly|of course|great question|here('s| is)|i can('|no)t|as an ai|i'm (sorry|an ai)|конечно|вот (ответ|исправленный|очищенный|список)|как (ии|искусственный интеллект)|я (могу|не могу))\b"#,
         options: [.caseInsensitive]
     )
 
@@ -125,6 +125,11 @@ public enum ValidationGate {
     }
 
     private static let numberWords: [(String, String)] = [
+        ("ноль", "0"), ("один", "1"), ("одна", "1"), ("два", "2"), ("две", "2"),
+        ("три", "3"), ("четыре", "4"), ("пять", "5"), ("шесть", "6"), ("семь", "7"),
+        ("восемь", "8"), ("девять", "9"), ("десять", "10"), ("одиннадцать", "11"),
+        ("двенадцать", "12"), ("двадцать", "20"), ("тридцать", "30"), ("сорок", "40"),
+        ("пятьдесят", "50"), ("сто", "100"),
         ("zero", "0"), ("one", "1"), ("two", "2"), ("three", "3"), ("four", "4"),
         ("five", "5"), ("six", "6"), ("seven", "7"), ("eight", "8"), ("nine", "9"),
         ("ten", "10"), ("eleven", "11"), ("twelve", "12"), ("twenty", "20"),

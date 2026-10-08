@@ -51,6 +51,7 @@ public struct SessionMeta: Codable, Equatable, Sendable {
     /// Human-relevant API error detail (e.g. the 404 body naming the model).
     public var errorMessage: String?
     public var modelID: String?
+    public var configuration: TranscriptionConfiguration?
     /// Key-up → terminal-state latency, for the local stats overlay.
     public var pipelineSeconds: Double?
     /// How loud the room was (10th-percentile level, dBFS) and how loud the

@@ -182,7 +182,7 @@ public final class DictationCoordinator: ObservableObject {
     /// Returns a live session, or nil when live mode is off or unavailable.
     /// Injected so the coordinator never needs to know about sockets or keys,
     /// and so tests can drive every live failure mode with no network.
-    private let makeLiveSession: @MainActor () -> LiveTranscribing?
+    private let makeLiveSession: @MainActor (TranscriptionConfiguration) -> LiveTranscribing?
 
     public init(
         audioFactory: @escaping @MainActor () -> AudioCapturing,
@@ -192,7 +192,7 @@ public final class DictationCoordinator: ObservableObject {
         now: @escaping () -> Date = Date.init,
         noiseHandlingEnabled: @escaping @MainActor () -> Bool = { SettingsStore().experimentalNoiseHandling },
         secureInputActive: @escaping @MainActor () -> Bool = { SecureInput.isActive },
-        makeLiveSession: @escaping @MainActor () -> LiveTranscribing? = { nil }
+        makeLiveSession: @escaping @MainActor (TranscriptionConfiguration) -> LiveTranscribing? = { _ in nil }
     ) {
         self.audioFactory = audioFactory
         self.transcription = transcription
@@ -206,7 +206,7 @@ public final class DictationCoordinator: ObservableObject {
 
     // MARK: - Hotkey entry point
 
-    static let coachTip = "Hold to talk · tap Space while holding for hands-free"
+    static let coachTip = JotL10n.text("Hold to talk · tap Space while holding for hands-free")
 
     /// Returns whether the intent was ACCEPTED — a refused .begin (secure field,
     /// session already active) must reach the hotkey grammar, or a Space-lock on
@@ -296,10 +296,10 @@ public final class DictationCoordinator: ObservableObject {
             // "secure input is on" alone reads as "Jot is broken", especially
             // during onboarding where a stuck loginwindow flag is common.
             if let holder = SecureInput.holder() {
-                coachingHint = "\(holder.name) has secure input on. \(SecureInput.advice(forHolder: holder.name))"
+                coachingHint = JotL10n.format("%@ has secure input on. %@", String(describing: holder.name), String(describing: SecureInput.advice(forHolder: holder.name)))
                 Log.session.info("begin refused: secure input held by \(holder.name, privacy: .public) (pid \(holder.pid))")
             } else {
-                coachingHint = "Can't dictate here — another app has secure input on"
+                coachingHint = JotL10n.text("Can't dictate here — another app has secure input on")
                 Log.session.info("begin refused: secure input active, holder unknown")
             }
             return false
@@ -314,7 +314,9 @@ public final class DictationCoordinator: ObservableObject {
         do {
             let folder = try FileLayout.makeSessionFolder(id: id, now: startedAt)
             var meta = SessionMeta(id: id, startedAt: startedAt, status: .recording)
-            let context = contextProvider()
+            var context = contextProvider()
+            context.configuration = context.configuration ?? SettingsStore().transcriptionConfiguration
+            meta.configuration = context.configuration
             meta.targetAppBundleID = context.targetAppBundleID
             meta.targetAppName = context.targetAppName
             meta.write(to: folder)
@@ -381,7 +383,8 @@ public final class DictationCoordinator: ObservableObject {
         do {
             // Latched once, here: the user flipping the setting mid-dictation
             // must not produce a recording that is half streamed and half not.
-            let live = makeLiveSession()
+            let snapshot = session?.context.configuration ?? SettingsStore().transcriptionConfiguration
+            let live = snapshot.permitsLive ? makeLiveSession(snapshot) : nil
             liveSession = live
             liveActiveForSession = live != nil
 
@@ -446,7 +449,7 @@ public final class DictationCoordinator: ObservableObject {
             guard !Task.isCancelled else { return }
             await MainActor.run { [weak self] in
                 if case .recording = self?.state {
-                    self?.coachingHint = "One minute left — 10-minute limit"
+                    self?.coachingHint = JotL10n.text("One minute left — 10-minute limit")
                 }
             }
         }
@@ -480,7 +483,7 @@ public final class DictationCoordinator: ObservableObject {
         guard case .recording = state else { return }
         Log.audio.error("audio engine died mid-recording (\(message, privacy: .public)) — finalizing with what we have")
         updateMeta { $0.errorCode = "engine_died" }
-        coachingHint = "\(message) — dictating what was captured"
+        coachingHint = JotL10n.format("%@ — dictating what was captured", String(describing: message))
         finalizeSession()
     }
 
@@ -683,7 +686,10 @@ public final class DictationCoordinator: ObservableObject {
                 let outcome = try await self.transcription.transcribe(
                     audioURL: FileLayout.audioCAF(in: session.folder),
                     durationSeconds: result.durationSeconds,
-                    context: session.context
+                    context: session.context,
+                    onRawTranscript: { [weak self] raw in
+                        await self?.preserveRawTranscript(raw, sessionID: sessionID)
+                    }
                 )
                 guard !Task.isCancelled else { return }
                 await self.completeTranscription(sessionID: sessionID, outcome: outcome, startedAt: finalizeStartedAt)
@@ -692,6 +698,11 @@ public final class DictationCoordinator: ObservableObject {
                 await self.failTranscription(sessionID: sessionID, error: error)
             }
         }
+    }
+
+    private func preserveRawTranscript(_ raw: String, sessionID: UUID) {
+        guard session?.id == sessionID, state == .transcribing else { return }
+        updateMeta { $0.rawTranscript = raw; $0.status = .transcribing }
     }
 
     private func completeTranscription(sessionID: UUID, outcome: TranscriptionResult, startedAt: Date) async {
@@ -781,9 +792,10 @@ public final class DictationCoordinator: ObservableObject {
             failure = .badRequest; code = "bad_request"; detail = message
         case .modelUnavailable(let model, let message):
             failure = .modelAccess; code = "model"
-            detail = message ?? "model \(model) not accessible"
+            detail = message ?? JotL10n.format("model %@ not accessible", String(describing: model))
         case .network: failure = .network; code = "network"
         case .auth: failure = .auth; code = "auth"
+        case .insufficientBalance: failure = .insufficientBalance; code = "balance"
         case .rateLimitedDaily: failure = .quotaExhausted; code = "quota"
         case .rateLimitedTransient: failure = .rateLimited; code = "rate_limit"
         case .timeout: failure = .timeout; code = "timeout"

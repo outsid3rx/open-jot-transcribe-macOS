@@ -54,7 +54,7 @@ public final class RecoveryScanner {
                 meta.write(to: folder)
                 store.upsert(meta: meta, folder: folder)
                 if index == 0 {
-                    onRecovered?("Recovered your last dictation — it's in History")
+                    onRecovered?(JotL10n.text("Recovered your last dictation — it's in History"))
                 }
                 continue
             }
@@ -76,12 +76,21 @@ public final class RecoveryScanner {
                     let duration = meta.audioDurationSeconds
                         ?? FileLayout.estimatedDuration(ofCAF: cafURL)
                         ?? 60
+                    if meta.configuration == nil {
+                        meta.configuration = SettingsStore().legacyTranscriptionConfiguration
+                        meta.write(to: folder)
+                    }
                     let context = DictationContext(
                         targetAppBundleID: meta.targetAppBundleID,
-                        targetAppName: meta.targetAppName
+                        targetAppName: meta.targetAppName,
+                        configuration: meta.configuration
                     )
+                    let store = self.store
                     let result = try await transcription.transcribe(
-                        audioURL: cafURL, durationSeconds: duration, context: context
+                        audioURL: cafURL, durationSeconds: duration, context: context,
+                        onRawTranscript: { raw in
+                            await MainActor.run { store.preserveRawTranscript(raw, folder: folder) }
+                        }
                     )
                     meta.rawTranscript = result.rawTranscript
                     meta.cleanedTranscript = result.cleanedTranscript
@@ -89,9 +98,10 @@ public final class RecoveryScanner {
                     meta.status = .recovered // text ready, user decides in History — never on the clipboard
                     meta.write(to: folder)
                     store.upsert(meta: meta, folder: folder)
-                    onRecovered?("Recovered your last dictation — it's in History")
+                    onRecovered?(JotL10n.text("Recovered your last dictation — it's in History"))
                     Log.history.info("RecoveryScanner: recovered \(record.id, privacy: .public)")
                 } catch {
+                    meta = SessionMeta.read(from: folder) ?? meta
                     meta.status = .queuedForRetry
                     meta.write(to: folder)
                     store.upsert(meta: meta, folder: folder)

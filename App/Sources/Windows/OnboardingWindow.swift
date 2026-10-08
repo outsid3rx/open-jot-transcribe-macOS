@@ -107,7 +107,7 @@ private struct OnboardingFlow: View {
         .overlay(alignment: .topLeading) {
             if !backStack.isEmpty {
                 Button(action: goBack) {
-                    Label("Back", systemImage: "chevron.left")
+                    Label(JotL10n.text("Back"), systemImage: "chevron.left")
                         .font(JotUI.TypeScale.body())
                         .foregroundStyle(JotUI.Colors.onSurfaceVariant)
                         .padding(.horizontal, JotUI.Spacing.s)
@@ -233,7 +233,7 @@ private struct PermissionCard: View {
     let icon: String
     let title: String
     let granted: Bool
-    var actionTitle = "Grant"
+    var actionTitle = JotL10n.text("Grant")
     let action: () -> Void
 
     var body: some View {
@@ -273,18 +273,18 @@ private struct WelcomeScreen: View {
     @State private var demoTask: Task<Void, Never>?
 
     // The whole promise in one loop: messy thought in, clean sentence out.
-    private static let heardLine = "um so let's meet at 1pm… actually no, 2pm"
-    private static let cleanLine = "Let's meet at 2pm."
+    private static let heardLine = JotL10n.text("привет проверяю голосовой ввод")
+    private static let cleanLine = JotL10n.text("Привет! Проверяю голосовой ввод.")
 
     var body: some View {
-        ScreenScaffold("Speak. It types.", "Hold a key, say the thing, and polished text lands wherever your cursor is.") {
+        ScreenScaffold(JotL10n.text("Speak. It types."), JotL10n.text("Hold a key, say the thing, and polished text lands wherever your cursor is.")) {
             VStack(spacing: JotUI.Spacing.m) {
                 WaveformView(level: demoLevel, processing: false)
                     .frame(width: 200, height: 48)
                     .background(Capsule().fill(JotUI.Colors.surface).shadow(color: .black.opacity(0.15), radius: 10, y: 2))
                 demoText
                     .frame(width: 420, height: 48)
-                PrimaryButton(title: "Get started", action: onNext)
+                PrimaryButton(title: JotL10n.text("Get started"), action: onNext)
             }
         }
         .onAppear(perform: startDemo)
@@ -350,152 +350,18 @@ private struct WelcomeScreen: View {
 
 private struct APIKeyScreen: View {
     let onNext: () -> Void
-    @State private var key = ""
-    @State private var validating = false
-    @State private var failed = false
-    @State private var saveFailed = false
-    /// The key authenticates but reaches no transcription model — say so here
-    /// rather than letting them discover it on their first dictation.
-    @State private var noModelAccess = false
-    /// Set when the server actively rejected the key, so we can say so instead of
-    /// the generic "didn't work".
-    @State private var rejection: String?
-    /// The check could not be performed. We let them past, but we say so.
-    @State private var unverified = false
-    /// Replacing a key that is already stored — bug report: a user who saved a
-    /// bad key had to UNINSTALL the app to get another chance at this screen.
-    @State private var replacing = false
-    @State private var storedKeyExists = KeychainStore.loadAPIKey() != nil
-    private var showingField: Bool { !storedKeyExists || replacing }
-
     var body: some View {
-        ScreenScaffold("Bring your own key.", "Jot uses your Gemini API key. It's stored in your Mac's Keychain and only ever sent to Google.") {
+        ScreenScaffold(JotL10n.text("Настройте распознавание речи"), JotL10n.text("Выберите провайдера, URL API и точное имя модели.")) {
             VStack(spacing: JotUI.Spacing.s) {
-                if !showingField {
-                    Label("Key already in your Keychain", systemImage: "checkmark.circle.fill")
-                        .font(JotUI.TypeScale.body())
-                        .foregroundStyle(JotUI.Colors.success)
-                    // Without this the only way out of a stored-but-wrong key was
-                    // to uninstall the app (dogfood).
-                    Button("Use a different key") {
-                        replacing = true
-                        key = ""
-                        rejection = nil
-                        unverified = false
-                        noModelAccess = false
-                    }
-                    .buttonStyle(.plain)
-                    .font(JotUI.TypeScale.labelSmall())
-                    .foregroundStyle(JotUI.Colors.onSurfaceVariant)
-                } else {
-                    SecureField("Paste your key", text: $key)
-                        .textFieldStyle(.roundedBorder)
-                        .font(JotUI.TypeScale.code)
-                        .frame(width: 320)
-                    if failed {
-                        Text(rejection.map { "That key was rejected: \($0)" }
-                             ?? "That key didn't work — check it in AI Studio.")
-                            .font(JotUI.TypeScale.labelSmall())
-                            .foregroundStyle(JotUI.Colors.error)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: 320)
-                    }
-                    if unverified {
-                        Text("Couldn't reach Google to check this key — saved it anyway. Your first dictation will tell you for sure.")
-                            .font(JotUI.TypeScale.labelSmall())
-                            .foregroundStyle(JotUI.Colors.onSurfaceVariant)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: 320)
-                    }
-                    if saveFailed {
-                        Text("Couldn't save to your Mac's Keychain — try again.")
-                            .font(JotUI.TypeScale.labelSmall())
-                            .foregroundStyle(JotUI.Colors.error)
-                    }
-                    if noModelAccess {
-                        Text("That key works, but it can't reach Jot's transcription model yet. Setup continues — ask for access, then try a dictation.")
-                            .font(JotUI.TypeScale.labelSmall())
-                            .foregroundStyle(JotUI.Colors.error)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Link("Get a key in Google AI Studio", destination: URL(string: "https://aistudio.google.com/apikey")!)
-                        .font(JotUI.TypeScale.labelSmall())
-                }
-                if validating {
-                    ProgressView().controlSize(.small)
-                } else {
-                    PrimaryButton(title: showingField ? "Save & continue" : "Continue",
-                                  disabled: showingField && key.trimmingCharacters(in: .whitespaces).isEmpty) {
-                        showingField ? validate() : onNext()
-                    }
-                    if showingField {
-                        // Don't wall off mic/accessibility setup behind the key —
-                        // the menu bar nudges toward Settings → Advanced until one exists.
-                        Button("I'll add it later", action: onNext)
-                            .buttonStyle(.plain)
-                            .font(JotUI.TypeScale.labelSmall())
-                            .foregroundStyle(JotUI.Colors.onSurfaceVariant)
-                    }
-                }
+                Text(JotL10n.text("Выберите провайдера, укажите URL API, точное имя модели и её ключ. Очистку можно включить позже в настройках."))
+                    .font(JotUI.TypeScale.body()).foregroundStyle(.secondary)
+                APISettingsEditor(showCleanup: false)
+                    .formStyle(.grouped)
+                    .frame(height: 330)
+                PrimaryButton(title: JotL10n.text("Продолжить"), action: onNext)
+                Text(JotL10n.text("Можно настроить разрешения сейчас, а ключ добавить позже."))
+                    .font(JotUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
             }
-        }
-    }
-
-    private func validate() {
-        // Guard the re-entry: `validating` swaps the button for a spinner, but a
-        // fast double-click can land two taps before SwiftUI redraws, and a user
-        // staring at a rejection WILL mash it.
-        guard !validating else { return }
-        let candidate = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        validating = true
-        failed = false
-        rejection = nil
-        unverified = false
-        Task {
-            let client = GeminiClient(apiKey: { candidate })
-            let check = await client.validateKey(endpoint: SettingsStore().geminiConfig.endpoint)
-
-            if case .rejected(let detail) = check {
-                // The server answered and said no. This is the case that used to
-                // slip through: validateKey returned a bare false, and a
-                // false-negative from a 1s reachability probe sent it down the
-                // "offline, save anyway" path — which then stored the bad key and
-                // advanced, with no way back to this screen.
-                rejection = detail
-                failed = true
-                validating = false
-                return
-            }
-
-            if check == .valid {
-                // "Your key works" must mean dictation works. Check the model
-                // Jot actually ships on — and only report, never substitute.
-                let config = SettingsStore().geminiConfig
-                noModelAccess = await client.resolveAvailableModel(
-                    from: [config.transcribeModel], endpoint: config.endpoint
-                ) == nil
-            }
-            unverified = (check == .unreachable)
-
-            guard KeychainStore.saveAPIKey(candidate) else {
-                saveFailed = true
-                validating = false
-                return
-            }
-            storedKeyExists = true
-            replacing = false
-            validating = false
-            // An unreachable check still advances — a captive portal must not
-            // wall someone out of setup — but the notice above says so plainly
-            // rather than implying the key was verified.
-            if unverified {
-                // Let them read it before the screen changes.
-                try? await Task.sleep(nanoseconds: 1_600_000_000)
-            }
-            onNext()
         }
     }
 }
@@ -533,15 +399,15 @@ private struct MicScreen: View {
     // "Can we listen?" read as surveillance (dogfood). This screen is a mic
     // CHECK, so it behaves like one: say hello, Jot hears you, it moves on.
     private var headline: String {
-        if granted { return "Say hello." }
-        return denied ? "The mic is switched off." : "Turn on the mic."
+        if granted { return JotL10n.text("Say hello.") }
+        return denied ? JotL10n.text("The mic is switched off.") : JotL10n.text("Turn on the mic.")
     }
     private var sub: String {
-        if heard { return "Heard you loud and clear." }
-        if granted { return "Jot is listening — this just checks your mic." }
+        if heard { return JotL10n.text("Heard you loud and clear.") }
+        if granted { return JotL10n.text("Jot is listening — this just checks your mic.") }
         return denied
-            ? "macOS only asks once. Turn Jot on under Privacy & Security → Microphone, then come back."
-            : "macOS asks once. Jot only ever records while you're dictating."
+            ? JotL10n.text("macOS only asks once. Turn Jot on under Privacy & Security → Microphone, then come back.")
+            : JotL10n.text("macOS asks once. Jot only ever records while you're dictating.")
     }
 
     var body: some View {
@@ -611,16 +477,16 @@ private struct MicScreen: View {
 
                     // Speaking IS the continue gesture; the quiet link remains for
                     // silent environments and users who can't speak.
-                    Button("Continue without speaking") { advance() }
+                    Button(JotL10n.text("Continue without speaking")) { advance() }
                         .buttonStyle(.plain)
                         .font(JotUI.TypeScale.labelSmall())
                         .foregroundStyle(JotUI.Colors.onSurfaceVariant)
                 } else {
                     PermissionCard(
                         icon: "mic.fill",
-                        title: "Microphone",
+                        title: JotL10n.text("Microphone"),
                         granted: granted,
-                        actionTitle: denied ? "Open Settings" : "Grant"
+                        actionTitle: denied ? JotL10n.text("Open Settings") : JotL10n.text("Grant")
                     ) {
                         if denied {
                             NSWorkspace.shared.open(URL(string:
@@ -636,7 +502,7 @@ private struct MicScreen: View {
                     }
                     // Never a dead end: setup continues, and the menu bar keeps
                     // saying what is still missing.
-                    Button("Skip for now", action: { advance() })
+                    Button(JotL10n.text("Skip for now"), action: { advance() })
                         .buttonStyle(.plain)
                         .font(JotUI.TypeScale.labelSmall())
                         .foregroundStyle(JotUI.Colors.onSurfaceVariant)
@@ -680,19 +546,19 @@ private struct MicScreen: View {
     /// What to tell the user about the input, in plain terms.
     private var micStatus: (text: String, bad: Bool)? {
         guard !heard else { return nil }
-        let name = currentInputName ?? "this input"
+        let name = currentInputName ?? JotL10n.text("this input")
         if deadDevice {
-            return ("No sound is reaching Jot from \(name). Pick a different input below.", true)
+            return (JotL10n.format("No sound is reaching Jot from %@. Pick a different input below.", String(describing: name)), true)
         }
         if maxLevel >= 0.06 {
             // Something is definitely arriving — say so, even before it is loud
             // enough to count as "hello".
-            return ("Picking up sound from \(name) — keep going.", false)
+            return (JotL10n.format("Picking up sound from %@ — keep going.", String(describing: name)), false)
         }
         if settled {
-            return ("Barely hearing anything from \(name). Speak up, or pick a different input below.", true)
+            return (JotL10n.format("Barely hearing anything from %@. Speak up, or pick a different input below.", String(describing: name)), true)
         }
-        return ("Listening on \(name)…", false)
+        return (JotL10n.format("Listening on %@…", String(describing: name)), false)
     }
 
     private var currentInputName: String? {
@@ -750,19 +616,19 @@ private struct AccessibilityScreen: View {
     @State private var slowGrant = false
 
     var body: some View {
-        ScreenScaffold("Let it type for you.", "macOS needs your OK before Jot can place text at your cursor.") {
+        ScreenScaffold(JotL10n.text("Let it type for you."), JotL10n.text("macOS needs your OK before Jot can place text at your cursor.")) {
             VStack(spacing: JotUI.Spacing.m) {
-                PermissionCard(icon: "keyboard", title: "Accessibility", granted: granted) {
+                PermissionCard(icon: "keyboard", title: JotL10n.text("Accessibility"), granted: granted) {
                     let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
                     _ = AXIsProcessTrustedWithOptions(options)
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
                 }
                 if slowGrant && !granted {
-                    Text("Granted but not detected? A relaunch may be needed.")
+                    Text(JotL10n.text("Granted but not detected? A relaunch may be needed."))
                         .font(JotUI.TypeScale.labelSmall())
                         .foregroundStyle(JotUI.Colors.onSurfaceVariant)
                 }
-                PrimaryButton(title: "Continue", disabled: !granted, action: onNext)
+                PrimaryButton(title: JotL10n.text("Continue"), disabled: !granted, action: onNext)
             }
         }
         .onAppear {
@@ -797,13 +663,13 @@ private struct GlobeKeyScreen: View {
     @State private var pollTimer: Timer?
 
     var body: some View {
-        ScreenScaffold("Make the 🌐 key yours.", "macOS currently uses the Globe key for its own shortcut. One switch and it's your dictation key.") {
+        ScreenScaffold(JotL10n.text("Make the 🌐 key yours."), JotL10n.text("macOS currently uses the Globe key for its own shortcut. One switch and it's your dictation key.")) {
             VStack(spacing: JotUI.Spacing.m) {
                 VStack(alignment: .leading, spacing: JotUI.Spacing.xs) {
-                    Text("In Keyboard settings, set:")
+                    Text(JotL10n.text("In Keyboard settings, set:"))
                         .font(JotUI.TypeScale.labelSmall())
                         .foregroundStyle(JotUI.Colors.onSurfaceVariant)
-                    Text("Press 🌐 key to  →  Do Nothing")
+                    Text(JotL10n.text("Press 🌐 key to  →  Do Nothing"))
                         .font(JotUI.TypeScale.title())
                         .foregroundStyle(JotUI.Colors.onSurface)
                 }
@@ -811,24 +677,24 @@ private struct GlobeKeyScreen: View {
                 .background(RoundedRectangle(cornerRadius: JotUI.Radius.large).fill(JotUI.Colors.surface))
 
                 if fixed {
-                    Label("Done — the Globe key is yours", systemImage: "checkmark.circle.fill")
+                    Label(JotL10n.text("Done — the Globe key is yours"), systemImage: "checkmark.circle.fill")
                         .font(JotUI.TypeScale.body())
                         .foregroundStyle(JotUI.Colors.success)
                 } else {
-                    Button("Open Keyboard Settings") {
+                    Button(JotL10n.text("Open Keyboard Settings")) {
                         NSWorkspace.shared.open(FnUsageAdvisor.keyboardSettingsURL)
                     }
                     .buttonStyle(.bordered)
                 }
 
                 if FnUsageAdvisor.karabinerIsPresent() {
-                    Text("Karabiner-Elements is running — if fn doesn't respond, add Jot to its exclusions.")
+                    Text(JotL10n.text("Karabiner-Elements is running — if fn doesn't respond, add Jot to its exclusions."))
                         .font(JotUI.TypeScale.labelSmall())
                         .foregroundStyle(JotUI.Colors.onSurfaceVariant)
                         .multilineTextAlignment(.center)
                 }
 
-                PrimaryButton(title: fixed ? "Continue" : "Skip for now", action: onNext)
+                PrimaryButton(title: fixed ? JotL10n.text("Continue") : JotL10n.text("Skip for now"), action: onNext)
             }
         }
         .onAppear {
@@ -851,20 +717,20 @@ private struct HowToScreen: View {
     private let keyName = SettingsStore().hotkeyKey.displayName
 
     var body: some View {
-        ScreenScaffold("Talk to Jot.", "Three gestures — that's the whole product.") {
+        ScreenScaffold(JotL10n.text("Talk to Jot."), JotL10n.text("Three gestures — that's the whole product.")) {
             VStack(spacing: JotUI.Spacing.m) {
                 VStack(alignment: .leading, spacing: JotUI.Spacing.s) {
-                    gestureRow(keys: [keyName], title: "Hold and talk",
-                               detail: "Release, and polished text lands at your cursor.")
-                    gestureRow(keys: [keyName, "space"], title: "Go hands-free",
-                               detail: "Tap Space while holding — talk as long as you like, tap \(keyName) to finish.")
-                    gestureRow(keys: ["esc"], title: "Changed your mind",
-                               detail: "Cancels the dictation. Long recordings are kept in History.")
+                    gestureRow(keys: [keyName], title: JotL10n.text("Hold and talk"),
+                               detail: JotL10n.text("Release, and polished text lands at your cursor."))
+                    gestureRow(keys: [keyName, "space"], title: JotL10n.text("Go hands-free"),
+                               detail: JotL10n.format("Tap Space while holding — talk as long as you like, tap %@ to finish.", String(describing: keyName)))
+                    gestureRow(keys: ["esc"], title: JotL10n.text("Changed your mind"),
+                               detail: JotL10n.text("Cancels the dictation. Long recordings are kept in History."))
                 }
                 .padding(JotUI.Spacing.m)
                 .background(RoundedRectangle(cornerRadius: JotUI.Radius.large).fill(JotUI.Colors.surface)
                     .shadow(color: .black.opacity(0.1), radius: 12, y: 2))
-                PrimaryButton(title: "Got it", action: onNext)
+                PrimaryButton(title: JotL10n.text("Got it"), action: onNext)
             }
         }
     }
@@ -917,10 +783,10 @@ private struct TryItScreen: View {
     private var hasWords: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-    private static let script = "Let's schedule the meeting for 1pm — actually, no, make it 2pm."
+    private static let script = JotL10n.text("Привет! Проверяю голосовой ввод.")
 
     var body: some View {
-        ScreenScaffold("Try it.", "Click into the field, hold \(keyName), and change your mind mid-sentence:") {
+        ScreenScaffold(JotL10n.text("Try it."), JotL10n.text("Нажмите на поле, удерживайте ") + keyName + JotL10n.text(" и произнесите фразу:")) {
             VStack(spacing: JotUI.Spacing.s) {
                 if revealRaw == nil {
                     Text("“\(Self.script)”")
@@ -930,7 +796,7 @@ private struct TryItScreen: View {
                         .padding(.horizontal, JotUI.Spacing.m)
                         .padding(.vertical, JotUI.Spacing.xs)
                         .background(Capsule().fill(JotUI.Colors.surfaceContainer))
-                    Text("(or say anything you like)")
+                    Text(JotL10n.text("(or say anything you like)"))
                         .font(JotUI.TypeScale.labelSmall())
                         .foregroundStyle(JotUI.Colors.onSurfaceVariant)
                 }
@@ -943,7 +809,7 @@ private struct TryItScreen: View {
                         .background(RoundedRectangle(cornerRadius: JotUI.Radius.large).fill(JotUI.Colors.surface))
                         .overlay(RoundedRectangle(cornerRadius: JotUI.Radius.large).strokeBorder(JotUI.Colors.outlineVariant.opacity(0.4), lineWidth: 1))
                     if text.isEmpty {
-                        Text("Your words will land here.")
+                        Text(JotL10n.text("Your words will land here."))
                             .font(JotUI.TypeScale.bodyLarge())
                             .foregroundStyle(JotUI.Colors.onSurfaceVariant.opacity(0.6))
                             .padding(JotUI.Spacing.m)
@@ -955,8 +821,8 @@ private struct TryItScreen: View {
                     // real record data, shown only when a real difference exists.
                     // The two rows ARE the story — no caption needed.
                     VStack(alignment: .leading, spacing: 3) {
-                        revealRow(label: "You said", value: raw, emphasized: false)
-                        revealRow(label: "Jot wrote", value: clean, emphasized: true)
+                        revealRow(label: JotL10n.text("You said"), value: raw, emphasized: false)
+                        revealRow(label: JotL10n.text("Jot wrote"), value: clean, emphasized: true)
                     }
                     .padding(JotUI.Spacing.s)
                     .frame(width: 400, alignment: .leading)
@@ -965,7 +831,7 @@ private struct TryItScreen: View {
                 } else if celebrated {
                     ConfettiBurst()
                         .frame(height: 40)
-                    Text("You just dictated \(text.split(separator: " ").count) words. That's the whole trick.")
+                    Text(JotL10n.format("You just dictated %@ words. That's the whole trick.", String(describing: text.split(separator: " ").count)))
                         .font(JotUI.TypeScale.body())
                         .foregroundStyle(JotUI.Colors.onSurfaceVariant)
                 }
@@ -973,9 +839,9 @@ private struct TryItScreen: View {
                 // quiet option only while it's empty (dogfood: "Skip for now"
                 // lingering after success wasn't helpful).
                 if hasWords {
-                    PrimaryButton(title: "Continue", action: onNext)
+                    PrimaryButton(title: JotL10n.text("Continue"), action: onNext)
                 } else {
-                    Button("Skip for now", action: onNext)
+                    Button(JotL10n.text("Skip for now"), action: onNext)
                         .buttonStyle(.plain)
                         .font(JotUI.TypeScale.body())
                         .foregroundStyle(JotUI.Colors.onSurfaceVariant)
@@ -1012,19 +878,7 @@ private struct TryItScreen: View {
         }
     }
 
-    /// The record lands moments after the text does — fetch with one retry, and
-    /// only show the card when their words genuinely changed.
-    ///
-    /// The left-hand row used to be `record.rawTranscript`, which worked only
-    /// while a second model did the cleanup — with native smart transcription
-    /// raw and cleaned are the same string, the predicate is always false, and
-    /// the single best moment in onboarding silently stops happening.
-    ///
-    /// So the reference is now the script this screen already put in front of
-    /// them, used only when they actually read it. That is both honest and a
-    /// stronger demo: the left row is the messy sentence they were asked to say,
-    /// the right row is what landed. Falls back to the raw≠clean rule when they
-    /// said something of their own.
+    /// Show only the real ASR/cleanup difference, never a scripted reference.
     private func fetchReveal() {
         fetchTask = Task { @MainActor in
             for delay in [0.4, 1.0] {
@@ -1038,25 +892,8 @@ private struct TryItScreen: View {
                     revealClean = clean
                     return
                 }
-                // They read the script: show it against what Jot wrote, but only
-                // if the result is actually shorter — otherwise there is no
-                // change of mind to reveal and the celebration is the honest UI.
-                if Self.readTheScript(clean), clean.count < Self.script.count {
-                    revealRaw = Self.script
-                    revealClean = clean
-                    return
-                }
             }
         }
-    }
-
-    /// Did they say roughly the scripted sentence? Compared on the tail — the
-    /// script's ending ("make it 2pm") survives cleanup, while its middle is
-    /// exactly what gets collapsed away.
-    private static func readTheScript(_ cleaned: String) -> Bool {
-        let words = normalized(cleaned).split(separator: " ")
-        guard words.count >= 3 else { return false }
-        return normalized(cleaned).contains("2pm") || normalized(cleaned).contains("2 pm")
     }
 
     private static func normalized(_ s: String) -> String {
@@ -1074,21 +911,21 @@ private struct DoneScreen: View {
     @State private var launchAtLogin = true
 
     var body: some View {
-        ScreenScaffold("You're set.", "Jot lives in your menu bar now. Hold \(SettingsStore().hotkeyKey.displayName) anywhere and start talking.") {
+        ScreenScaffold(JotL10n.text("You're set."), JotL10n.format("Jot lives in your menu bar now. Hold %@ anywhere and start talking.", String(describing: SettingsStore().hotkeyKey.displayName))) {
             VStack(spacing: JotUI.Spacing.m) {
                 // Same voice as the scaffold's subtitle — two type sizes on the
                 // page total (display + body), never three.
                 // "strips your ums" read as jargon to a first-time user (Kat,
                 // from the wild) — name the filler words plainly instead.
-                Text("It removes filler words like \"umm\" and \"uhh\", follows your change of mind, and takes \"new paragraph\" literally. Teach it your jargon in Settings → Dictionary.")
+                Text(JotL10n.text("It removes filler words like \"umm\" and \"uhh\", follows your change of mind, and takes \"new paragraph\" literally. Teach it your jargon in Settings → Dictionary."))
                     .font(JotUI.TypeScale.body())
                     .foregroundStyle(JotUI.Colors.onSurfaceVariant)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 480)
-                Toggle("Start Jot at login", isOn: $launchAtLogin)
+                Toggle(JotL10n.text("Start Jot at login"), isOn: $launchAtLogin)
                     .toggleStyle(.checkbox)
-                PrimaryButton(title: "Start dictating") {
+                PrimaryButton(title: JotL10n.text("Start dictating")) {
                     let enabled = SMAppService.mainApp.status == .enabled
                     do {
                         if launchAtLogin, !enabled {

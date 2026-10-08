@@ -54,6 +54,7 @@ public enum FLACEncoder {
             // read(into:) can throw a spurious nilError at EOF with an Int16 client
             // format — guard on framePosition instead (probed on macOS 26).
             while reader.framePosition < reader.length {
+                try Task.checkCancellation()
                 try reader.read(into: chunk)
                 if chunk.frameLength == 0 { break }
                 try writer.write(from: chunk)

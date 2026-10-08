@@ -48,11 +48,11 @@ struct DictionaryView: View {
 
     private var addRow: some View {
         HStack(spacing: JotUI.Spacing.xs) {
-            TextField("Add a word or phrase…", text: $newTerm)
+            TextField(JotL10n.text("Add a word or phrase…"), text: $newTerm)
                 .textFieldStyle(.plain)
                 .font(JotUI.TypeScale.body(grad: grad))
                 .onSubmit(add)
-            TextField("Gemini hears it as… (optional)", text: $newMisspelling)
+            TextField(JotL10n.text("Gemini hears it as… (optional)"), text: $newMisspelling)
                 .textFieldStyle(.plain)
                 .font(JotUI.TypeScale.body(grad: grad))
                 .foregroundStyle(JotUI.Colors.onSurfaceVariant)
@@ -98,7 +98,7 @@ struct DictionaryView: View {
                         .foregroundStyle(entry.starred ? JotUI.Colors.gYellow : JotUI.Colors.onSurfaceVariant.opacity(0.5))
                 }
                 .buttonStyle(.plain)
-                .help("Starred words are prioritized")
+                .help(JotL10n.text("Starred words are prioritized"))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(entry.term)
@@ -125,7 +125,7 @@ struct DictionaryView: View {
         }
         .listStyle(.inset)
         .scrollContentBackground(.hidden)
-        .searchable(text: $search, placement: .automatic, prompt: "Search")
+        .searchable(text: $search, placement: .automatic, prompt: JotL10n.text("Search"))
     }
 
     private var emptyState: some View {
@@ -134,10 +134,10 @@ struct DictionaryView: View {
             Image(systemName: "character.book.closed")
                 .font(.system(size: 28))
                 .foregroundStyle(JotUI.Colors.onSurfaceVariant)
-            Text("Teach it your words")
+            Text(JotL10n.text("Teach it your words"))
                 .font(JotUI.TypeScale.title(grad: grad))
                 .foregroundStyle(JotUI.Colors.onSurface)
-            Text("Names, jargon, product terms — add them once,\nthey're spelled right in every dictation.")
+            Text(JotL10n.text("Names, jargon, product terms — add them once,\nthey're spelled right in every dictation."))
                 .font(JotUI.TypeScale.body(grad: grad))
                 .foregroundStyle(JotUI.Colors.onSurfaceVariant)
                 .multilineTextAlignment(.center)
@@ -148,13 +148,13 @@ struct DictionaryView: View {
 
     private var footer: some View {
         HStack {
-            Text(feedback ?? "\(entries.count) \(entries.count == 1 ? "word" : "words")")
+            Text(feedback ?? JotL10n.wordCount(entries.count))
                 .font(JotUI.TypeScale.labelSmall(grad: grad))
                 .foregroundStyle(feedback == nil ? JotUI.Colors.onSurfaceVariant : JotUI.Colors.primary)
             Spacer()
-            Button("Import CSV…", action: importCSV)
+            Button(JotL10n.text("Import CSV…"), action: importCSV)
                 .font(JotUI.TypeScale.labelSmall(grad: grad))
-            Button("Export CSV…", action: exportCSV)
+            Button(JotL10n.text("Export CSV…"), action: exportCSV)
                 .font(JotUI.TypeScale.labelSmall(grad: grad))
                 .disabled(entries.isEmpty)
         }
@@ -167,7 +167,7 @@ struct DictionaryView: View {
     private func add() {
         guard store.add(term: newTerm, misspelling: newMisspelling.isEmpty ? nil : newMisspelling) else {
             let trimmed = newTerm.trimmingCharacters(in: .whitespacesAndNewlines)
-            showFeedback(trimmed.count > 60 ? "Keep terms under 60 characters" : "Already in your dictionary")
+            showFeedback(trimmed.count > 60 ? JotL10n.text("Keep terms under 60 characters") : JotL10n.text("Already in your dictionary"))
             return
         }
         newTerm = ""
@@ -196,7 +196,7 @@ struct DictionaryView: View {
         let count = store.importCSV(csv)
         Log.ui.info("Dictionary: imported \(count) entries")
         reload()
-        showFeedback(count == 0 ? "Nothing new to import" : "Imported \(count) \(count == 1 ? "word" : "words")")
+        showFeedback(count == 0 ? JotL10n.text("Nothing new to import") : JotL10n.text("Импортировано: ") + JotL10n.wordCount(count))
     }
 
     private func exportCSV() {
@@ -205,10 +205,10 @@ struct DictionaryView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try store.exportCSV().write(to: url, atomically: true, encoding: .utf8)
-            showFeedback("Exported \(entries.count) \(entries.count == 1 ? "word" : "words")")
+            showFeedback(JotL10n.text("Экспортировано: ") + JotL10n.wordCount(entries.count))
         } catch {
             Log.ui.error("Dictionary export failed: \(error)")
-            showFeedback("Export failed — couldn't write the file")
+            showFeedback(JotL10n.text("Export failed — couldn't write the file"))
         }
     }
 }

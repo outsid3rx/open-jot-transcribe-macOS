@@ -53,9 +53,9 @@ public enum HotkeyKey: String, CaseIterable, Codable, Sendable {
     public var displayName: String {
         switch self {
         case .fn: return "fn 🌐"
-        case .rightCommand: return "Right ⌘"
-        case .rightOption: return "Right ⌥"
-        case .rightControl: return "Right ⌃"
+        case .rightCommand: return JotL10n.text("Right ⌘")
+        case .rightOption: return JotL10n.text("Right ⌥")
+        case .rightControl: return JotL10n.text("Right ⌃")
         }
     }
 }
