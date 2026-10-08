@@ -13,115 +13,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Packages a built Jot.app into a drag-to-install DMG with custom art.
-#
+# Packages an existing Jot.app with an Applications shortcut for drag installation.
+# No Xcode, Apple Developer account or Finder automation is required.
 #   scripts/make-dmg.sh <path-to-Jot.app> [output.dmg]
-#
-# Layout is set through Finder (AppleScript), which is how every Mac installer
-# DMG is made. The first run may ask for permission to control Finder.
+# Packaging preserves the app's signature; it does not notarize the app or DMG.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP_PATH="${1:?usage: make-dmg.sh <Jot.app> [output.dmg]}"
-VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PATH/Contents/Info.plist")
-OUT_DMG="${2:-build/Jot-$VERSION.dmg}"
-VOLUME_NAME="Jot"
-STAGING="build/dmg-staging"
-RW_DMG="build/jot-rw.dmg"
+jot_app="${1:?usage: make-dmg.sh <Jot.app> [output.dmg]}"
+[ -d "$jot_app" ] || { echo "error: app not found: $jot_app" >&2; exit 1; }
+codesign --verify --deep --strict "$jot_app"
+jot_version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$jot_app/Contents/Info.plist")
+jot_arch=$(lipo -archs "$jot_app/Contents/MacOS/Jot")
+if [[ "$jot_arch" == *" "* ]]; then jot_arch="universal"; fi
+jot_out="${2:-build/Jot-$jot_version-macOS-$jot_arch.dmg}"
+mkdir -p "$(dirname "$jot_out")"
+jot_staging=$(mktemp -d "${TMPDIR:-/tmp}/jot-dmg.XXXXXX")
+trap 'rm -rf "$jot_staging"' EXIT
 
-# Icon coordinates MUST match scripts/make-dmg-background.swift — but Finder's
-# origin is TOP-left while the art is drawn bottom-left, so Y is flipped here.
-WIN_W=700; WIN_H=460
-APP_X=190;  APP_Y=$((WIN_H - 215))
-LINK_X=510; LINK_Y=$((WIN_H - 215))
-# Finder's window bounds include the title bar; the CONTENT must equal the art.
-TITLEBAR=28
-
-echo "▸ Rendering background art"
-swift scripts/make-dmg-background.swift >/dev/null
-# A lone 1x PNG gets upscaled on Retina and looks pixelated. A multi-rep TIFF
-# carries both scales in one file, which is what Finder actually honours.
-tiffutil -cathidpicheck build/dmg-background.png build/dmg-background@2x.png \
-  -out build/dmg-background.tiff >/dev/null
-
-echo "▸ Staging"
-rm -rf "$STAGING" "$RW_DMG" "$OUT_DMG"
-mkdir -p "$STAGING/.background"
-cp -R "$APP_PATH" "$STAGING/"
-ln -s /Applications "$STAGING/Applications"
-cp build/dmg-background.tiff "$STAGING/.background/background.tiff"
-
-echo "▸ Creating read/write image"
-hdiutil create -srcfolder "$STAGING" -volname "$VOLUME_NAME" -fs HFS+ \
-  -format UDRW -ov "$RW_DMG" >/dev/null
-
-# A previous failed run can leave /Volumes/Jot mounted, in which case the new
-# image lands on "/Volumes/Jot 1" — the script then decorates the WRONG volume
-# and hdiutil convert fails with "Resource temporarily unavailable" because the
-# real one is still attached. Detach leftovers, then trust hdiutil's reported
-# mount point instead of assuming the name.
-for stale in "/Volumes/$VOLUME_NAME"*; do
-  [ -d "$stale" ] || continue
-  echo "▸ Detaching leftover volume: $stale"
-  hdiutil detach "$stale" -force >/dev/null 2>&1 || true
-done
-
-MOUNT_DIR=$(hdiutil attach "$RW_DMG" -noautoopen -nobrowse \
-  | tr '\t' '\n' | grep '^/Volumes/' | tail -1)
-[ -n "$MOUNT_DIR" ] && [ -d "$MOUNT_DIR" ] || { echo "attach produced no mount point"; exit 1; }
-echo "▸ Mounted at $MOUNT_DIR"
-
-echo "▸ Arranging the window"
-osascript <<APPLESCRIPT || echo "  (Finder scripting unavailable — DMG still works, layout will be default)"
-tell application "Finder"
-  tell disk "$(basename "$MOUNT_DIR")"
-    open
-    set theWindow to container window
-    set current view of theWindow to icon view
-    set toolbar visible of theWindow to false
-    set statusbar visible of theWindow to false
-    set the bounds of theWindow to {200, 160, $((200 + WIN_W)), $((160 + WIN_H + TITLEBAR))}
-    set viewOptions to the icon view options of theWindow
-    set arrangement of viewOptions to not arranged
-    set icon size of viewOptions to 96
-    set text size of viewOptions to 12
-    set background picture of viewOptions to file ".background:background.tiff"
-    set position of item "Jot.app" of theWindow to {$APP_X, $APP_Y}
-    set position of item "Applications" of theWindow to {$LINK_X, $LINK_Y}
-    -- Anything not part of the pitch goes off-canvas (only reachable when the
-    -- user has "show hidden files" on, but then it would sit on the artwork).
-    try
-      set position of item ".background" of theWindow to {$((WIN_W + 260)), 240}
-    end try
-    try
-      set position of item ".fseventsd" of theWindow to {$((WIN_W + 260)), 360}
-    end try
-    -- Bounds LAST: view options can resize the window, and the content area must
-    -- end up exactly the size of the background art.
-    set the bounds of theWindow to {200, 160, $((200 + WIN_W)), $((160 + WIN_H + TITLEBAR))}
-    update without registering applications
-    delay 2
-    close
-  end tell
-end tell
-APPLESCRIPT
-
-# No volume-icon file: every technique for it (.VolumeIcon.icns, an Icon\r
-# resource fork) leaves a stray item visible to anyone with "show hidden files"
-# on, and a generic disk icon in the title bar is normal for a DMG. The window
-# art is what sells the install.
-SetFile -a C "$MOUNT_DIR" 2>/dev/null || true
-# Keep the plumbing out of sight even for people who show hidden files.
-chflags hidden "$MOUNT_DIR/.background" 2>/dev/null || true
-sync
-hdiutil detach "$MOUNT_DIR" -quiet || hdiutil detach "$MOUNT_DIR" -force -quiet
-
-echo "▸ Compressing"
-hdiutil convert "$RW_DMG" -format UDZO -imagekey zlib-level=9 -o "$OUT_DMG" >/dev/null
-rm -f "$RW_DMG"
-rm -rf "$STAGING"
-
-# The container is signed by notarizing + stapling it in scripts/release.sh;
-# there is no local Developer ID key to codesign with (cloud-managed signing).
-
-echo "✓ $OUT_DMG ($(du -h "$OUT_DMG" | cut -f1))"
+ditto "$jot_app" "$jot_staging/Jot.app"
+ln -s /Applications "$jot_staging/Applications"
+hdiutil create -srcfolder "$jot_staging" -volname "Jot $jot_version" -fs HFS+ \
+  -format UDZO -imagekey zlib-level=9 -ov "$jot_out"
+hdiutil verify "$jot_out"
+printf 'Created: %s\n' "$jot_out"
