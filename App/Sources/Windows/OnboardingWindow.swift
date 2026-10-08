@@ -624,9 +624,12 @@ private struct AccessibilityScreen: View {
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
                 }
                 if slowGrant && !granted {
-                    Text(JotL10n.text("Granted but not detected? A relaunch may be needed."))
+                    Text(JotL10n.text("Если Jot уже отмечен, удалите старую запись из «Универсального доступа» и добавьте эту сборку заново. macOS проверяет подпись приложения, а не только его имя."))
                         .font(JotUI.TypeScale.labelSmall())
                         .foregroundStyle(JotUI.Colors.onSurfaceVariant)
+                    Button(JotL10n.text("Показать текущую сборку")) {
+                        NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+                    }
                 }
                 PrimaryButton(title: JotL10n.text("Continue"), disabled: !granted, action: onNext)
             }

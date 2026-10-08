@@ -20,6 +20,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dictationController: DictationController?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        // Read-only diagnostics from this exact signed executable; no migration,
+        // Keychain reads, history recovery, recording, or network requests.
+        if CommandLine.arguments.contains("--diagnose-permissions") {
+            let report: [String: Any] = [
+                "bundleID": Bundle.main.bundleIdentifier ?? "",
+                "bundlePath": Bundle.main.bundleURL.path,
+                "accessibility": AXIsProcessTrusted(),
+                "listenEvents": CGPreflightListenEventAccess(),
+                "postEvents": CGPreflightPostEventAccess(),
+                "soundResources": EarconPlayer.Earcon.allCases.allSatisfy {
+                    Bundle.main.url(forResource: $0.rawValue, withExtension: "wav", subdirectory: "Sounds") != nil
+                }
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]),
+               let text = String(data: data, encoding: .utf8) { print(text) }
+            exit(0)
+        }
+        #endif
         // Single instance, always: two copies means two event taps, two pills,
         // and a race over the History DB. The newer instance defers.
         let bundleID = Bundle.main.bundleIdentifier ?? "com.ammaar.jot"
