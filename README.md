@@ -96,6 +96,8 @@ open Jot.xcodeproj
 
 Debug по умолчанию не требует Apple account или сертификата. Для подписи сертификатом Apple передайте свой `DEVELOPMENT_TEAM` и `CODE_SIGN_IDENTITY` в `build.sh` либо `JOT_SIGN_IDENTITY` в `build-clt.sh`. Release использует Developer ID и отдельный `scripts/release.sh`.
 
+Релизы публикуются вручную через GitHub Releases. GitHub Actions выполняет только тесты и проверку сборки; публикации по тегу или кнопке запуска workflow нет. Подготовка архива без Apple Developer ID описана в [инструкции выпуска](docs/RELEASING.md).
+
 | Каталог | Содержание |
 | --- | --- |
 | `App/` | Меню, HUD, окна, русский интерфейс |
