@@ -5,23 +5,23 @@
 ### Google Sans Flex
 - File: `App/Resources/Fonts/GoogleSansFlex/GoogleSansFlex-Regular.ttf` (variable font)
 - Copyright: Google LLC / Font Bureau (David Berlow)
-- License: SIL Open Font License 1.1 — see `App/Resources/Fonts/GoogleSansFlex/OFL-GoogleSansFlex.txt`
-- Source: served via Google Fonts (fonts.google.com/specimen/Google+Sans+Flex); binary
+- License: [SIL Open Font License 1.1](App/Resources/Fonts/GoogleSansFlex/OFL-GoogleSansFlex.txt)
+- Source: served via [Google Fonts](https://fonts.google.com/specimen/Google+Sans+Flex); binary
   pinned in-repo. The font is used unmodified (the OFL Reserved Font Name clause
   requires renaming if modified).
 
 ### Google Sans Code
 - File: `App/Resources/Fonts/GoogleSansCode/GoogleSansCode-VF.ttf` (variable font, v7.001)
-- Copyright: Google LLC
-- License: SIL Open Font License 1.1 — see `App/Resources/Fonts/GoogleSansCode/OFL-GoogleSansCode.txt`
-- Source: github.com/googlefonts/googlesans-code (release v7.001), unmodified.
+- Copyright: The Google Sans Code Project Authors (see the bundled license).
+- License: [SIL Open Font License 1.1](App/Resources/Fonts/GoogleSansCode/OFL-GoogleSansCode.txt)
+- Source: [googlefonts/googlesans-code](https://github.com/googlefonts/googlesans-code) (release v7.001), unmodified.
 
 ## Sounds
 
 None — no third-party audio ships in this app. The earcons are original works,
 synthesized from scratch by `scripts/generate-earcons.py` (sine fundamentals plus
 soft harmonics; no samples, no recorded material) and covered by this
-repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
+repository's Apache 2.0 license. See [sound attribution](App/Resources/Sounds/ATTRIBUTION.md).
 
 ## Swift packages
 

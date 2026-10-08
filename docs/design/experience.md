@@ -1,8 +1,11 @@
 # Experience & Design Plan — Google-styled macOS Dictation App
 
-> **Historical planning record.** Captures the design as planned; it may diverge
-> from what shipped. `LICENSE` and `THIRD_PARTY_NOTICES.md` are authoritative for
-> licensing, and the code is authoritative for behaviour.
+> **Historical record from the upstream project.** These plans, findings and
+> measurements describe the original development context, not the current fork.
+> Some research inputs and truncated code excerpts are not available here.
+> See the [current documentation](../README.md) and [architecture](../ARCHITECTURE.md).
+> [LICENSE](../../LICENSE) and [third-party notices](../../THIRD_PARTY_NOTICES.md)
+> govern attribution; the current code is authoritative for behaviour.
 
 Scope: complete UX spec for the v1 push-to-talk dictation app (Swift/SwiftUI, LSUIElement menu-bar app, AppKit NSPanel HUD). All motion is expressed as M3 tokens mapped to SwiftUI `spring(response:dampingFraction:)`. All colors are GM3 production values. Sources: `google-design.md` (tokens, Gemini Live, sound), `wispr-flow.md` (Flow Bar behaviors), `new-entrants.md` (Gemini Live state grammar, ChatGPT regression lessons), `superwhisper-macwhisper-voiceink.md` (HUD/status-dot patterns), `macos-architecture.md` (NSPanel, secure input, AppleFnUsageType), `reliability-formatting.md` (failure states).
 

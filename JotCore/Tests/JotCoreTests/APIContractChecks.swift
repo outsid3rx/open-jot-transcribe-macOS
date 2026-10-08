@@ -66,7 +66,7 @@ enum APIContractChecks {
         task.cancel()
         pass("Reject cross-origin and downgraded credential redirects")
 
-        endpoint = ModelEndpoint.preset(.polza)
+        endpoint = ModelEndpoint.preset(.openAICompatible)
         endpoint.baseURL = "https://asr.invalid/api/v1"
         endpoint.model = "vendor/exact-model-v1"
         recorder.reset(responses: [.text("Привет!")])
@@ -210,14 +210,14 @@ enum APIContractChecks {
         pass("Backward-compatible metadata and immutable legacy migration")
 
         // Capture starts on the next runloop turn. A settings edit during warming
-        // must not activate Google Live for a session that began on Polza.
+        // must not activate Google Live for a session that began on a compatible API.
         var selected = config
         let capture = ContractCapture()
         let coordinator = DictationCoordinator(
             audioFactory: { capture }, transcription: spy, insertion: ContractInserter(),
             contextProvider: { DictationContext(configuration: selected) },
             noiseHandlingEnabled: { false }, secureInputActive: { false },
-            makeLiveSession: { _ in fatalError("Polza snapshot must never create Google Live") }
+            makeLiveSession: { _ in fatalError("Compatible API snapshot must never create Google Live") }
         )
         coordinator.handle(.begin)
         let capturedFolder = coordinator.activeSessionFolder!
@@ -226,7 +226,7 @@ enum APIContractChecks {
         try require(capture.started && SessionMeta.read(from: capturedFolder)?.configuration == config, "Warming lost API snapshot")
         coordinator.handle(.cancel)
         try await Task.sleep(nanoseconds: 50_000_000)
-        pass("Coordinator snapshots API before warming and excludes Google Live for Polza")
+        pass("Coordinator snapshots API before warming and excludes Google Live for compatible APIs")
 
         // Account-level failure must not block a different provider in the queue.
         for (offset, cfg) in [config, config, newConfig].enumerated() {

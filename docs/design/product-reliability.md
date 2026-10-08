@@ -1,8 +1,11 @@
 # Product Spec & Reliability Plan — Google-styled macOS Dictation App (v1)
 
-> **Historical planning record.** Captures the design as planned; it may diverge
-> from what shipped. `LICENSE` and `THIRD_PARTY_NOTICES.md` are authoritative for
-> licensing, and the code is authoritative for behaviour.
+> **Historical record from the upstream project.** These plans, findings and
+> measurements describe the original development context, not the current fork.
+> Some research inputs and truncated code excerpts are not available here.
+> See the [current documentation](../README.md) and [architecture](../ARCHITECTURE.md).
+> [LICENSE](../../LICENSE) and [third-party notices](../../THIRD_PARTY_NOTICES.md)
+> govern attribution; the current code is authoritative for behaviour.
 
 Working assumptions locked upstream: native Swift/SwiftUI menu-bar app, NSPanel pill HUD, BYOK Gemini key in Keychain, batch-up/stream-down Gemini transcribe API (`gemini-3.5-transcribe:streamGenerateContent`, inline base64 audio + steering TEXT part, SSE response), crash-safe CAF recording from t=0, Apache-2.0 open source.
 

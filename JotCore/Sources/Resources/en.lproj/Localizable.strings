@@ -133,7 +133,7 @@
 "Never leaves this Mac" = "Never leaves this Mac";
 "No microphone found — connect one to dictate" = "No microphone found — connect one to dictate";
 "No microphones found" = "No microphones found";
-"No middleman server, no account, no analytics, no screenshots, no keystroke logging. One network host." = "No middleman server, no account, no analytics, no screenshots, no keystroke logging. One network host.";
+"No middleman server, no account, no analytics, no screenshots, no keystroke logging. One network host." = "No Jot server, analytics, screenshots or keystroke logging. Audio goes to your selected API; optional cleanup sends transcript text to its configured API.";
 "No sound is reaching Jot from %@. Pick a different input below." = "No sound is reaching Jot from %@. Pick a different input below.";
 "No speech detected" = "No speech detected";
 "Nothing here yet" = "Nothing here yet";
@@ -180,7 +180,7 @@
 "Search your dictations" = "Search your dictations";
 "Secure input is on — can't paste here" = "Secure input is on — can't paste here";
 "Secure input is on — saved to History" = "Secure input is on — saved to History";
-"Sent to the Gemini API with your key" = "Sent to the Gemini API with your key";
+"Sent to the Gemini API with your key" = "Sent to the selected API with your key";
 "Sent with the audio, so names are spelled right as you speak" = "Sent with the audio, so names are spelled right as you speak";
 "Sets your Mac's input device" = "Sets your Mac's input device";
 "Settings" = "Settings";

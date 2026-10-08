@@ -1,8 +1,11 @@
 # Architecture & Engineering Plan — Native macOS Dictation App ("unmistakably Google")
 
-> **Historical planning record.** Captures the design as planned; it may diverge
-> from what shipped. `LICENSE` and `THIRD_PARTY_NOTICES.md` are authoritative for
-> licensing, and the code is authoritative for behaviour.
+> **Historical record from the upstream project.** These plans, findings and
+> measurements describe the original development context, not the current fork.
+> Some research inputs and truncated code excerpts are not available here.
+> See the [current documentation](../README.md) and [architecture](../ARCHITECTURE.md).
+> [LICENSE](../../LICENSE) and [third-party notices](../../THIRD_PARTY_NOTICES.md)
+> govern attribution; the current code is authoritative for behaviour.
 
 Working name used throughout: **product `Transcribe.app`, core package `JotCore`** (final branding TBD; rename is a find/replace + bundle-id decision at M0). Deployment target: **macOS 14.0+, Apple Silicon + Intel** (matches `@Observable`, modern SwiftUI, `SMAppService`; VoiceInk ships 14.4+ so 14.0 is competitive). Distribution: Developer ID + notarization, never MAS (sandbox forbids consuming CGEventTaps and CGEvent paste — research: macos-architecture.md §g).
 

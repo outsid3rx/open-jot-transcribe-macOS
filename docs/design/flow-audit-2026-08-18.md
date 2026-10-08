@@ -1,8 +1,11 @@
 # Flow audit — 2026-08-18 (production pass 2)
 
-> **Historical planning record.** Captures the design as planned; it may diverge
-> from what shipped. `LICENSE` and `THIRD_PARTY_NOTICES.md` are authoritative for
-> licensing, and the code is authoritative for behaviour.
+> **Historical record from the upstream project.** These plans, findings and
+> measurements describe the original development context, not the current fork.
+> Some research inputs and truncated code excerpts are not available here.
+> See the [current documentation](../README.md) and [architecture](../ARCHITECTURE.md).
+> [LICENSE](../../LICENSE) and [third-party notices](../../THIRD_PARTY_NOTICES.md)
+> govern attribution; the current code is authoritative for behaviour.
 
 Flow-oriented production audit: 14 user-journey tracers + adversarial verification.
 46 findings confirmed (9 P0 + 37 P1) — all fixed in commits 7599ab3 and 726ad7a.

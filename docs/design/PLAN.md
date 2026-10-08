@@ -1,8 +1,11 @@
 # Jot — macOS Dictation App Plan
 
-> **Historical planning record.** Captures the design as planned; it may diverge
-> from what shipped. `LICENSE` and `THIRD_PARTY_NOTICES.md` are authoritative for
-> licensing, and the code is authoritative for behaviour.
+> **Historical record from the upstream project.** These plans, findings and
+> measurements describe the original development context, not the current fork.
+> Some research inputs and truncated code excerpts are not available here.
+> See the [current documentation](../README.md) and [architecture](../ARCHITECTURE.md).
+> [LICENSE](../../LICENSE) and [third-party notices](../../THIRD_PARTY_NOTICES.md)
+> govern attribution; the current code is authoritative for behaviour.
 
 ## Context
 
@@ -27,7 +30,7 @@ This plan is the product of a 10-agent research sweep (Wispr Flow forensic teard
 
 **Never in v1**: accounts, telemetry/analytics SDKs, screenshots, full-AX-tree scraping, meeting notes, iOS.
 
-## Architecture (full spec: `design/architecture.md`)
+## Architecture (full spec: [architecture plan](architecture.md))
 
 Thin app target + local SPM package `JotCore` (~90% of logic, headless `swift test` in CI).
 
@@ -78,7 +81,7 @@ jot/
 
 **State machine**: `idle → warming → recording → finalizing → transcribing → inserting → done | error | cancelled`; HUD is a pure function of semantic state (Experience spec owns all HUD timing/lifecycle); overlapping sessions allowed (new dictation never blocks on a stuck old one, session-UUID stale guards).
 
-## Design (full spec: `design/experience.md`)
+## Design (full spec: [experience plan](experience.md))
 
 - **HUD pill**: 48pt full-pill, bottom-center, `NSVisualEffectView` material + GM3 surfaces (`#FFFFFF`/`#1E1F20`), states idleDot(40pt) ↔ listening(200pt, 5-bar Google-Blue waveform, EMA attack .35/release .08, idle sine breathing) → locked(268pt, stop button w/ M3E shape-morph press) → processing(132pt, frozen bars run a four-color `#4285F4→#EA4335→#FBBC04→#34A853` traveling sweep + AI-shimmer edge glow — the only place that gradient family appears) → success(48pt circle, trim-path check in Google Green, word count) / error(errorContainer surface, shake, "saved to History" + Retry) / secureField / offline(amber queue dot). All motion from `MotionTokens.swift` (M3 springs mapped to SwiftUI: e.g. `.expressiveDefaultSpatial` = spring(response:0.32, damping:0.8); effects springs damping 1.0 — never bounce color/opacity).
 - **Sound**: G-major earcon family (start = D5→G5 rise ~160ms; stop = mirror; success = G5 tap; error = muted F♯4+G4 dyad; lock = G4-B4-D5 arpeggio), <400ms, ~-20dBFS, frame-synced to state transitions, bootstrapped from CC-BY Material sound pack, zero sounds on hover/menus ("design the silence").
@@ -86,7 +89,7 @@ jot/
 - **Onboarding** (8 screens): animated hero pill → paste-and-validate API key (live `models` call, AI Studio link) → mic permission (card becomes live level meter: "Say hello — we're listening") → Accessibility (1s live-polling card) → Globe-key step (reads `AppleFnUsageType`, deep-links System Settings → "Press 🌐 key to → Do Nothing", auto-advances; Karabiner warning; escape hatch to other keys) → hotkey pick → interactive first dictation with four-color confetti → done (launch-at-login checkbox visible, default on — consent by visibility).
 - **Do-NOT list**: no Gemini spark / four-circle construction / Google "G" · no proprietary Google Sans · no auto-send default · no #000 · no focus stealing · no notch gimmicks · no telemetry.
 
-## Reliability (full spec: `design/product-reliability.md` — 24-row failure matrix F1-F24)
+## Reliability (full spec: [reliability plan](product-reliability.md) — 24-row failure matrix F1-F24)
 
 Invariants: audio is on disk before any network I/O; every failure writes terminal status + error code to meta.json; one silent auto-retry for transient classes; errors are never modal. Highlights: offline → queue + auto-drain on network-restored; 401/403 → menu-bar error dot + Settings deep-link, new dictations still record and queue; 429 → distinguish RPM (retry) vs daily quota (banner + AI Studio link); model-answers-instead-of-transcribes → gate catches, silent verbatim retry; sleep mid-recording → finalize + transcribe on wake; disk full → loud degradation. Latency budget (5s dictation): FLAC encode ~30ms + upload ~20-90ms + TTFT (probe!) + streaming ≈ **p50 ≤0.9s key-up→inserted**, p95 2s; perceived speed via connection prewarm on keyDown, HUD choreography, insert-once-at-end.
 
@@ -136,12 +139,11 @@ Invariants: audio is on disk before any network I/O; every failure writes termin
 ## Reference documents (full specs — copy into repo `docs/design/` at M0)
 
 Session scratchpad the session scratchpad:
-- `design/architecture.md` — module contracts, state machine table, concurrency, CI/signing detail
-- `design/experience.md` — complete HUD/motion/sound/onboarding/settings spec w/ exact tokens
-- `design/product-reliability.md` — failure matrix F1-F24, prompt v1 text, gate thresholds, latency math, PRIVACY.md outline
-- `design/critique.md` — full must-fix list + spike definitions
-- `research/*.md` — 9 research reports (competitor teardowns, macOS APIs, Google design, reliability, auth, wire, cleanup)
-(Backup copies of raw agent output: the session scratchpad)
+- [architecture plan](architecture.md) — module contracts, state machine table, concurrency, CI/signing detail
+- [experience plan](experience.md) — complete HUD/motion/sound/onboarding/settings spec w/ exact tokens
+- [reliability plan](product-reliability.md) — failure matrix F1-F24, prompt v1 text, gate thresholds, latency math, PRIVACY.md outline
+- [critique](critique.md) — full must-fix list + spike definitions
+- Research reports and raw agent scratchpads are not included in this repository.
 
 ## Needed from Ammaar at implementation start
 

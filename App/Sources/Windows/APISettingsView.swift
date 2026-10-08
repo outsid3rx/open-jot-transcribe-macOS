@@ -98,7 +98,7 @@ private struct EndpointFields: View {
             ForEach(APIProvider.allCases, id: \.self) { Text($0.title).tag($0) }
         }
         TextField(JotL10n.text("Базовый URL API"), text: $endpoint.baseURL,
-                  prompt: Text("https://polza.ai/api/v1"))
+                  prompt: Text(ModelEndpoint.preset(endpoint.provider).baseURL))
             .font(JotUI.TypeScale.code)
         TextField(isCleanup ? JotL10n.text("Модель очистки") : JotL10n.text("Модель транскрибации"), text: $endpoint.model,
                   prompt: Text(JotL10n.text("Точный идентификатор у провайдера")))

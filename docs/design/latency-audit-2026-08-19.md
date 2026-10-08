@@ -1,8 +1,11 @@
 # Latency audit — 2026-08-19 (measured on Ammaar's M-series + AirPods)
 
-> **Historical planning record.** Captures the design as planned; it may diverge
-> from what shipped. `LICENSE` and `THIRD_PARTY_NOTICES.md` are authoritative for
-> licensing, and the code is authoritative for behaviour.
+> **Historical record from the upstream project.** These plans, findings and
+> measurements describe the original development context, not the current fork.
+> Some research inputs and truncated code excerpts are not available here.
+> See the [current documentation](../README.md) and [architecture](../ARCHITECTURE.md).
+> [LICENSE](../../LICENSE) and [third-party notices](../../THIRD_PARTY_NOTICES.md)
+> govern attribution; the current code is authoritative for behaviour.
 
 40-agent hot-path audit, every finding adversarially verified with measurements.
 **Fixed** in 062dcbc, 3e70bb3, 3280904: capture prewarm (75–147ms → 22–25ms), HAL tail
@@ -83,6 +86,10 @@ In JotCore/Sources/AudioEngine/AudioCaptureEngine.swift:
 ```swift
 public func start(writingTo url: URL) async throws {
     try await withChe
+
+```
+
+_The source excerpt ends here; it was truncated in the upstream record._
 
 ### [P1] One-tick deferral of capture.start() does not yield a frame — mic start still blocks the pill's first paint
 - **Win:** Removes the mic start from between `setPill` and the CATransaction commit entirely. Warm path (steady state, spare available): 18.2–23.0 ms off the pill's first-paint path, median 19.1 ms — enough to land the paint inside one 60 Hz vsync (16.7 ms) instead of missing one or two, and inside one 120 Hz
